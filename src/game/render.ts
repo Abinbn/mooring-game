@@ -721,3 +721,62 @@ export function drawMooringLines(
     ctx.stroke();
   }
 }
+
+export function drawRendezvousZone(
+  ctx: CanvasRenderingContext2D,
+  rz: { x: number; y: number; radius: number },
+  time: number,
+  inRange: boolean,
+) {
+  ctx.save();
+  const pulse = (time * 0.7) % 1;
+  ctx.strokeStyle = inRange ? "rgba(255, 179, 64, 0.5)" : "rgba(56, 225, 255, 0.35)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 8]);
+  ctx.beginPath();
+  ctx.arc(rz.x, rz.y, rz.radius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = inRange ? "rgba(255, 179, 64, 0.3)" : "rgba(56, 225, 255, 0.2)";
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.arc(rz.x, rz.y, rz.radius * pulse, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = inRange ? "#ffb340" : "#38e1ff";
+  ctx.beginPath();
+  ctx.arc(rz.x, rz.y, 4.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.font = "bold 11px Rubik, system-ui, sans-serif";
+  ctx.fillStyle = inRange ? "rgba(255, 220, 140, 0.95)" : "rgba(180, 240, 255, 0.8)";
+  ctx.textAlign = "center";
+  ctx.fillText(inRange ? "📯 TUG RENDEZVOUS [H]" : "PILOT STATION", rz.x, rz.y - 12);
+  ctx.restore();
+}
+
+export function drawDepartureFairway(
+  ctx: CanvasRenderingContext2D,
+  time: number,
+  view: WorldView,
+) {
+  const exitX = -680;
+  if (view.left > exitX + 50 || view.right < exitX - 50) return;
+  ctx.save();
+  ctx.setLineDash([12, 12]);
+  ctx.strokeStyle = "rgba(62, 242, 160, 0.5)";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(exitX, Math.max(view.top, -800));
+  ctx.lineTo(exitX, Math.min(view.bottom, 800));
+  ctx.stroke();
+
+  const offset = (time * 18) % 30;
+  ctx.font = "bold 12px Rubik, system-ui, sans-serif";
+  ctx.fillStyle = "rgba(62, 242, 160, 0.85)";
+  ctx.textAlign = "center";
+  ctx.fillText("⬅ OPEN SEA (CHANNEL EXIT)", exitX - 45, -120 + offset);
+  ctx.fillText("⬅ OPEN SEA (CHANNEL EXIT)", exitX - 45, 120 + offset);
+  ctx.restore();
+}

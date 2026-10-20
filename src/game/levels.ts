@@ -35,10 +35,36 @@ export interface Berth {
   tolAngle: number; // radians
 }
 
+export type MissionType = "arrival" | "departure" | "tutorial";
+export type DepartureSide = "west" | "north" | "south";
+
+export interface DepartureExit {
+  side: DepartureSide;
+  label: string;
+  threshold: number;
+}
+
+export interface PilotBoundary {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+export interface RendezvousZone {
+  x: number;
+  y: number;
+  radius: number;
+}
+
 export interface LevelDef {
   index: number;
   name: string;
   berthNumber: string;
+  missionType: MissionType;
+  departureExit?: DepartureExit;
+  narrowPassage?: boolean;
+  pilotBoundary: PilotBoundary;
   tipKeys: string;
   tipTouch: string;
   start: { pos: Vec; heading: number };
@@ -47,6 +73,7 @@ export interface LevelDef {
   gustPeriod: number;
   timeLimit: number;
   berth: Berth;
+  rendezvous: RendezvousZone;
   obstacles: Obstacle[];
   buoys: BuoyDef[];
   timeOfDay: TimeOfDay;
@@ -86,13 +113,41 @@ function mooredShip(y: number, heading: number, L: number, W: number, seed: numb
   return makeObstacle("ship", transformPoly(hullPoly(L, W), pos, heading), vis);
 }
 
-function baseObstacles(): { quay: Obstacle; rocks: Obstacle[] } {
+function baseObstacles(exitSide?: DepartureSide): { quay: Obstacle; rocks: Obstacle[] } {
   const quay = makeObstacle("quay", rectPoly(QUAY_X + 450, 0, 450, 2600));
-  const rocks = [
-    makeObstacle("rock", rectPoly(BASIN.left - 40, 0, 40, 1040)),
-    makeObstacle("rock", rectPoly((BASIN.left + QUAY_X) / 2, BASIN.top - 40, (QUAY_X - BASIN.left) / 2 + 40, 40)),
-    makeObstacle("rock", rectPoly((BASIN.left + QUAY_X) / 2, BASIN.bottom + 40, (QUAY_X - BASIN.left) / 2 + 40, 40)),
-  ];
+  const rocks: Obstacle[] = [];
+
+  // West rock wall
+  rocks.push(makeObstacle("rock", rectPoly(BASIN.left - 40, 0, 40, 1040)));
+
+  // Top rock wall (North)
+  if (exitSide === "north") {
+    // Leave navigable channel open between x = -440 and x = -100
+    const leftWidth = (-440 - BASIN.left) / 2;
+    const leftCenterX = BASIN.left + leftWidth;
+    rocks.push(makeObstacle("rock", rectPoly(leftCenterX, BASIN.top - 40, leftWidth + 40, 40)));
+
+    const rightWidth = (QUAY_X - -100) / 2;
+    const rightCenterX = -100 + rightWidth;
+    rocks.push(makeObstacle("rock", rectPoly(rightCenterX, BASIN.top - 40, rightWidth + 40, 40)));
+  } else {
+    rocks.push(makeObstacle("rock", rectPoly((BASIN.left + QUAY_X) / 2, BASIN.top - 40, (QUAY_X - BASIN.left) / 2 + 40, 40)));
+  }
+
+  // Bottom rock wall (South)
+  if (exitSide === "south") {
+    // Leave navigable channel open between x = -440 and x = -100
+    const leftWidth = (-440 - BASIN.left) / 2;
+    const leftCenterX = BASIN.left + leftWidth;
+    rocks.push(makeObstacle("rock", rectPoly(leftCenterX, BASIN.bottom + 40, leftWidth + 40, 40)));
+
+    const rightWidth = (QUAY_X - -100) / 2;
+    const rightCenterX = -100 + rightWidth;
+    rocks.push(makeObstacle("rock", rectPoly(rightCenterX, BASIN.bottom + 40, rightWidth + 40, 40)));
+  } else {
+    rocks.push(makeObstacle("rock", rectPoly((BASIN.left + QUAY_X) / 2, BASIN.bottom + 40, (QUAY_X - BASIN.left) / 2 + 40, 40)));
+  }
+
   return { quay, rocks };
 }
 
@@ -155,11 +210,13 @@ export function makeLevel(index: number, runSeed: number): LevelDef {
 
   const base: Omit<LevelDef, "name" | "tipKeys" | "tipTouch" | "start" | "timeLimit"> = {
     index,
-    berthNumber: `B${((index - 1) % 9) + 1}`,
+    berthNumber: index === 0 ? "ACADEMY" : `B${((index - 1) % 9) + 1}`,
+    missionType: index === 0 ? "tutorial" : index % 2 === 0 ? "departure" : "arrival",
     current: { x: 0, y: 0 },
     gust: 0,
     gustPeriod: 9,
     berth: { y: 0, halfLen: SHIP_L / 2 + 40, tolAlong: 28, tolAngle: rad(7) },
+    rendezvous: { x: -200, y: 0, radius: 260 },
     obstacles,
     buoys,
     timeOfDay: "day",
@@ -168,41 +225,64 @@ export function makeLevel(index: number, runSeed: number): LevelDef {
   };
 
   switch (index) {
+    case 0:
+      return {
+        ...base,
+        index: 0,
+        berthNumber: "ACADEMY",
+        missionType: "tutorial",
+        name: "Pilot Academy",
+        tipKeys: "Welcome to Pilot Academy. Follow the on-screen instructions to learn shiphandling.",
+        tipTouch: "Welcome to Pilot Academy. Follow the on-screen instructions to learn shiphandling.",
+        start: { pos: { x: -320, y: 160 }, heading: up },
+        current: { x: 0, y: 0 },
+        gust: 0,
+        timeLimit: 9999,
+        rendezvous: { x: -200, y: 0, radius: 260 },
+        berth: { y: 0, halfLen: SHIP_L / 2 + 45, tolAlong: 32, tolAngle: rad(9) },
+        timeOfDay: "day",
+      };
     case 1:
       return {
         ...base,
+        missionType: "arrival",
         name: "First Berth",
-        tipKeys: "Hold → (or E + D) so both tugs push her onto the berth. Ease off early — she's heavy!",
-        tipTouch: "Hold both ▶ tug buttons to push her onto the berth. Ease off early — she's heavy!",
-        start: { pos: { x: -122, y: 0 }, heading: up },
-        timeLimit: 60,
+        tipKeys: "Approach the dock and sound horn [H] to summon tugs, then push into the berth.",
+        tipTouch: "Approach the dock and tap 📯 horn to summon tugs, then push into the berth.",
+        start: { pos: { x: -260, y: 60 }, heading: up },
+        rendezvous: { x: -180, y: 0, radius: 240 },
+        timeLimit: 75,
       };
     case 2:
       return {
         ...base,
-        name: "Angle of Approach",
-        tipKeys: "Q / E swing the bow, A / D swing the stern. Straighten up, then push in.",
-        tipTouch: "Top buttons swing the bow, bottom buttons swing the stern. Straighten up, then push in.",
-        start: { pos: { x: -230, y: 40 }, heading: up + rad(28) },
-        timeLimit: 75,
+        missionType: "departure",
+        name: "Outbound Departure",
+        tipKeys: "Peel away from the quay with tugs (Q + A / ◀), then throttle ahead to the open channel.",
+        tipTouch: "Peel away from the quay with tugs (◀), then throttle ahead to the open channel.",
+        start: { pos: { x: QUAY_X - SHIP_W / 2 - 2, y: 0 }, heading: up },
+        timeLimit: 85,
       };
     case 3:
       return {
         ...base,
-        name: "Dead Slow Ahead",
-        tipKeys: "W / ↑ engine ahead, S / ↓ astern. She takes a long time to stop — brake early!",
-        tipTouch: "▲ engine ahead, ▼ astern. She takes a long time to stop — brake early!",
-        start: { pos: { x: -170, y: 520 }, heading: up },
-        timeLimit: 90,
+        missionType: "arrival",
+        name: "Angle of Approach",
+        tipKeys: "Summon tugs with horn [H], swing the head with Q/E, and align with the quay.",
+        tipTouch: "Summon tugs with 📯 horn, swing the head with tugs, and align with the quay.",
+        start: { pos: { x: -280, y: 80 }, heading: up + rad(28) },
+        rendezvous: { x: -200, y: 20, radius: 250 },
+        timeLimit: 85,
       };
     case 4:
       return {
         ...base,
-        name: "Cross Current",
-        tipKeys: "A current runs along the quay. Counter the drift with your engine while the tugs work.",
-        tipTouch: "A current runs along the quay. Counter the drift with your engine while the tugs work.",
-        start: { pos: { x: -240, y: -140 }, heading: up + rad(-14) },
-        current: { x: 0, y: 3.2 },
+        missionType: "departure",
+        name: "Fairway Departure",
+        tipKeys: "Unmoor and push clear of the quay into the outgoing fairway channel to open sea.",
+        tipTouch: "Unmoor and push clear of the quay into the outgoing fairway channel to open sea.",
+        start: { pos: { x: QUAY_X - SHIP_W / 2 - 2, y: 0 }, heading: up },
+        current: { x: -1.2, y: 2.2 },
         timeLimit: 90,
         timeOfDay: "dusk",
       };
@@ -211,22 +291,25 @@ export function makeLevel(index: number, runSeed: number): LevelDef {
       obstacles.push(mooredShip(SHIP_L / 2 + 42 + 60, -up, 120, 22, seed + 2));
       return {
         ...base,
+        missionType: "arrival",
         name: "Tight Squeeze",
-        tipKeys: "Neighbours on both sides. Square up before you commit — scraping them costs hull.",
-        tipTouch: "Neighbours on both sides. Square up before you commit — scraping them costs hull.",
-        start: { pos: { x: -300, y: -60 }, heading: up + rad(35) },
+        tipKeys: "Neighbours on both sides. Summon tugs and square up before committing.",
+        tipTouch: "Neighbours on both sides. Summon tugs and square up before committing.",
+        start: { pos: { x: -320, y: -60 }, heading: up + rad(35) },
         berth: { y: 0, halfLen: SHIP_L / 2 + 42, tolAlong: 22, tolAngle: rad(6) },
-        timeLimit: 90,
+        rendezvous: { x: -220, y: 0, radius: 240 },
+        timeLimit: 95,
         timeOfDay: "dusk",
       };
     }
     default: {
       const d = index - 5; // difficulty step ≥ 1
-      const dist = 230 + r() * 220;
+      const isDeparture = index % 2 === 0;
+      const dist = 240 + r() * 220;
       const alongMag = 140 + r() * Math.min(520, 120 + d * 60);
       const along = (r() < 0.5 ? -1 : 1) * alongMag;
       const tilt = (r() - 0.5) * 2 * rad(Math.min(75, 18 + d * 7));
-      const flipped = d >= 3 && r() < 0.3;
+      const flipped = !isDeparture && d >= 3 && r() < 0.3;
       const heading = up + tilt + (flipped ? Math.PI : 0);
 
       const curMag = Math.min(6, 1.2 + d * 0.55) * (0.5 + r() * 0.5);
@@ -235,7 +318,9 @@ export function makeLevel(index: number, runSeed: number): LevelDef {
 
       // Buoys scattered along the approach
       const nBuoys = Math.min(4, 1 + Math.floor(r() * (d + 1)));
-      const start = { x: -dist, y: along };
+      const start = isDeparture
+        ? { x: QUAY_X - SHIP_W / 2 - 2, y: 0 }
+        : { x: -dist, y: along };
       for (let i = 0; i < nBuoys; i++) {
         const t = 0.25 + r() * 0.5;
         const px = start.x + (-SHIP_W / 2 - 1 - start.x) * t + (r() - 0.5) * 220;
@@ -260,10 +345,15 @@ export function makeLevel(index: number, runSeed: number): LevelDef {
       const tod: TimeOfDay = (["dusk", "night", "day"] as TimeOfDay[])[(index + 1) % 3];
       return {
         ...base,
-        name: PROC_NAMES[(index - 6) % PROC_NAMES.length],
-        tipKeys: d >= 3 && flipped ? "She's pointing the other way — any heading alongside counts." : "Watch the current and the buoys. Precision pays.",
-        tipTouch: d >= 3 && flipped ? "She's pointing the other way — any heading alongside counts." : "Watch the current and the buoys. Precision pays.",
-        start: { pos: start, heading },
+        missionType: isDeparture ? "departure" : "arrival",
+        name: isDeparture ? `Outbound Run ${index}` : PROC_NAMES[(index - 6) % PROC_NAMES.length],
+        tipKeys: isDeparture
+          ? "Unmoor with tugs and steer out through the buoy channel to open sea."
+          : "Watch the current and sound horn [H] to summon tugs.",
+        tipTouch: isDeparture
+          ? "Unmoor with tugs and steer out through the buoy channel to open sea."
+          : "Watch the current and sound horn to summon tugs.",
+        start: { pos: start, heading: isDeparture ? up : heading },
         current,
         gust: d >= 3 ? 0.5 : 0,
         gustPeriod: 7 + r() * 5,

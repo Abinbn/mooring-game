@@ -139,6 +139,35 @@ export class ParticleSystem {
     });
   }
 
+  steamPuff(x: number, y: number, vx = 0, vy = 0, count = 16) {
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const spd = 6 + Math.random() * 18;
+      const life = 0.9 + Math.random() * 0.9;
+      this.spawn({
+        kind: PKind.Smoke,
+        x: x + (Math.random() - 0.5) * 4,
+        y: y + (Math.random() - 0.5) * 4,
+        vx: vx * 0.3 + Math.cos(a) * spd,
+        vy: vy * 0.3 + Math.sin(a) * spd - 10,
+        life,
+        maxLife: life,
+        size: 3 + Math.random() * 3.5,
+        rot: 0,
+        rotV: 0,
+        drag: 1.2,
+        color: "rgba(245, 250, 255, 0.85)",
+        grow: 14,
+      });
+    }
+  }
+
+  hornShockwaves(x: number, y: number) {
+    this.ripple(x, y, 8, 1.8);
+    this.ripple(x, y, 20, 1.5);
+    this.ripple(x, y, 32, 1.3);
+  }
+
   ripple(x: number, y: number, size = 4, life = 1.4) {
     this.spawn({
       kind: PKind.Ripple,

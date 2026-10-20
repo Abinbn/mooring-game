@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Game, type Action, type Breakdown, type GameOverInfo, type HudData, type Phase } from "@/game/Game";
 import { addScore, getLastName, loadScores, qualifies, setLastName, type ScoreEntry } from "@/game/highscores";
+import { clearSavedRun, loadSavedRun, type SavedRunState } from "@/game/savedRun";
 import Hud from "@/components/Hud";
 import TouchControls from "@/components/TouchControls";
 import { GameOverScreen, LevelClearScreen, PauseScreen, StartScreen } from "@/components/Screens";
@@ -15,6 +16,7 @@ export default function App() {
   const [breakdown, setBreakdown] = useState<Breakdown | null>(null);
   const [gameOver, setGameOver] = useState<GameOverInfo | null>(null);
   const [scores, setScores] = useState<ScoreEntry[]>(() => loadScores());
+  const [savedRun, setSavedRun] = useState<SavedRunState | null>(() => loadSavedRun());
   const [highlight, setHighlight] = useState(-1);
   const [pendingName, setPendingName] = useState(false);
   const [name, setName] = useState("");
@@ -71,8 +73,12 @@ export default function App() {
           setHighlight(-1);
           if (q) setName(getLastName() || "");
           setScores(loadScores());
+          setSavedRun(null);
         }
-        if (p === "menu") setScores(loadScores());
+        if (p === "menu") {
+          setScores(loadScores());
+          setSavedRun(loadSavedRun());
+        }
       },
       onHud: (h) => setHud(h),
     });
@@ -111,6 +117,25 @@ export default function App() {
     gameRef.current?.setTouchMode(touch);
   }, [touch]);
 
+  const onHorn = useCallback(() => gameRef.current?.soundHorn(), []);
+  const onStartTutorial = useCallback(() => {
+    gameRef.current?.startTutorial();
+  }, []);
+  const onPlay = useCallback(() => {
+    clearSavedRun();
+    setSavedRun(null);
+    gameRef.current?.startRun();
+  }, []);
+  const onResumeRun = useCallback(() => {
+    const s = loadSavedRun();
+    if (s && gameRef.current) {
+      gameRef.current.resumeSavedRun(s);
+    } else {
+      gameRef.current?.startRun();
+    }
+    setSavedRun(null);
+  }, []);
+
   // Global menu keys
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -122,7 +147,12 @@ export default function App() {
       if (e.code === "Enter" || e.code === "Space") {
         if (p === "menu") {
           e.preventDefault();
-          g.startRun();
+          const s = loadSavedRun();
+          if (s) {
+            onResumeRun();
+          } else {
+            onPlay();
+          }
         } else if (p === "levelClear") {
           e.preventDefault();
           g.skipLevelClear();
@@ -142,14 +172,13 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [restart, toMenu]);
+  }, [restart, toMenu, onResumeRun, onPlay]);
 
   const onInput = useCallback((a: Action, d: boolean) => gameRef.current?.setInput(a, d), []);
   const onMute = useCallback(() => {
     const g = gameRef.current;
     if (g) setMuted(g.toggleMute());
   }, []);
-  const onPlay = useCallback(() => gameRef.current?.startRun(), []);
   const onPause = useCallback(() => gameRef.current?.pause(), []);
   const onResume = useCallback(() => gameRef.current?.resume(), []);
   const onSkip = useCallback(() => gameRef.current?.skipLevelClear(), []);
@@ -161,10 +190,21 @@ export default function App() {
     <div ref={wrapRef} className="relative h-screen w-full overflow-hidden bg-[#06202b]" style={{ height: "100dvh" }}>
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
 
-      {showHud && <Hud hud={{ ...hud, muted }} touch={touch} onPause={onPause} onMute={onMute} />}
+      {showHud && <Hud hud={{ ...hud, muted }} touch={touch} onPause={onPause} onMute={onMute} onHorn={onHorn} />}
       {showTouch && <TouchControls onInput={onInput} />}
 
-      {phase === "menu" && <StartScreen onPlay={onPlay} scores={scores} touch={touch} muted={muted} onMute={onMute} />}
+      {phase === "menu" && (
+        <StartScreen
+          onPlay={onPlay}
+          onResume={onResumeRun}
+          onStartTutorial={onStartTutorial}
+          savedRun={savedRun}
+          scores={scores}
+          touch={touch}
+          muted={muted}
+          onMute={onMute}
+        />
+      )}
       {phase === "paused" && <PauseScreen onResume={onResume} onRestart={restart} onMenu={toMenu} touch={touch} />}
       {phase === "levelClear" && breakdown && <LevelClearScreen key={breakdown.levelIndex} data={breakdown} onContinue={onSkip} />}
       {phase === "gameover" && gameOver && (

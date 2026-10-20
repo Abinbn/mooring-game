@@ -214,8 +214,21 @@ export class AudioSys {
     this.tone(156, "sawtooth", 0, d, 0.05, { attack: 0.1, filter: 700 });
   }
 
-  tugToot() {
-    this.tone(330, "square", 0, 0.14, 0.06, { attack: 0.01, filter: 1200 });
+  shipHorn() {
+    this.ensure();
+    const d = 1.25;
+    this.tone(96, "sawtooth", 0, d, 0.22, { attack: 0.08, filter: 460 });
+    this.tone(97.2, "sawtooth", 0, d, 0.22, { attack: 0.08, filter: 460 });
+    this.tone(48, "sine", 0, d + 0.15, 0.18, { attack: 0.1, filter: 220 });
+    this.tone(144, "sawtooth", 0.02, d * 0.9, 0.08, { attack: 0.12, filter: 650 });
+    this.noiseBurst(0, 0.35, 0.06, 800, "bandpass");
+  }
+
+  tugToot(pitchOffset = 0) {
+    this.ensure();
+    const base = 380 + pitchOffset;
+    this.tone(base, "square", 0, 0.16, 0.09, { attack: 0.015, filter: 1400 });
+    this.tone(base * 1.5, "sawtooth", 0.01, 0.14, 0.04, { attack: 0.02, filter: 1800 });
   }
 
   tick(i: number) {
