@@ -118,6 +118,7 @@ export default function App() {
   }, [touch]);
 
   const onHorn = useCallback(() => gameRef.current?.soundHorn(), []);
+  const onToggleTugs = useCallback(() => gameRef.current?.toggleTugs(), []);
   const onStartTutorial = useCallback(() => {
     gameRef.current?.startTutorial();
   }, []);
@@ -190,7 +191,16 @@ export default function App() {
     <div ref={wrapRef} className="relative h-screen w-full overflow-hidden bg-[#06202b]" style={{ height: "100dvh" }}>
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
 
-      {showHud && <Hud hud={{ ...hud, muted }} touch={touch} onPause={onPause} onMute={onMute} onHorn={onHorn} />}
+      {showHud && (
+        <Hud
+          hud={{ ...hud, muted }}
+          touch={touch}
+          onPause={onPause}
+          onMute={onMute}
+          onHorn={onHorn}
+          onToggleTugs={onToggleTugs}
+        />
+      )}
       {showTouch && <TouchControls onInput={onInput} />}
 
       {phase === "menu" && (

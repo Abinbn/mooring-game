@@ -1,5 +1,5 @@
 import { QUAY_X, TUG_L, TUG_W } from "./constants";
-import type { Berth, LevelDef, Obstacle, ShipVisual, TimeOfDay } from "./levels";
+import type { Berth, DepartureExit, LevelDef, Obstacle, PilotBoundary, ShipVisual, TimeOfDay } from "./levels";
 import { CONTAINER_COLORS } from "./constants";
 import { hullPoly, rng, type Vec } from "./math";
 
@@ -392,6 +392,7 @@ export interface ShipDrawOpts {
   damage?: number; // 0..1 (0 = pristine)
   lights?: boolean;
   wrecked?: boolean;
+  rudder?: number; // -1 (port) to +1 (starboard)
 }
 
 export function drawShip(ctx: CanvasRenderingContext2D, s: ShipVisual, opts: ShipDrawOpts = {}) {
@@ -532,6 +533,20 @@ export function drawShip(ctx: CanvasRenderingContext2D, s: ShipVisual, opts: Shi
     ctx.beginPath();
     ctx.arc(L * 0.1, W / 2 - 1, 0.9, 0, 6.2832);
     ctx.fill();
+  }
+
+  // Rudder at stern
+  if (opts.rudder !== undefined) {
+    const rx = -L * 0.495;
+    ctx.save();
+    ctx.translate(rx, 0);
+    ctx.rotate(opts.rudder * 0.62); // Deflection up to ~35 deg
+    ctx.fillStyle = "#1e2226";
+    ctx.fillRect(-7.5, -1.5, 7.5, 3.0);
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 0.7;
+    ctx.strokeRect(-7.5, -1.5, 7.5, 3.0);
+    ctx.restore();
   }
 
   ctx.restore();
@@ -705,20 +720,50 @@ export function drawMooringLines(
   to: Vec[],
   progress: number,
 ) {
-  ctx.strokeStyle = "#f3e4b8";
-  ctx.lineWidth = 1.3;
+  if (progress <= 0) return;
   for (let i = 0; i < from.length; i++) {
     const a = from[i];
     const b = to[i];
-    const t = Math.min(1, Math.max(0, progress * 1.3 - i * 0.12));
+    const t = Math.min(1, Math.max(0, progress * 1.3 - i * 0.1));
     if (t <= 0) continue;
     const ex = a.x + (b.x - a.x) * t;
     const ey = a.y + (b.y - a.y) * t;
-    const sag = (1 - progress) * 6;
+    const sag = (1 - progress) * 8;
+
+    // Outer hawser shadow
+    ctx.strokeStyle = "rgba(50, 40, 20, 0.65)";
+    ctx.lineWidth = 3.6;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.quadraticCurveTo((a.x + ex) / 2, (a.y + ey) / 2 + sag + 1, ex, ey);
+    ctx.stroke();
+
+    // Braided hawser line
+    ctx.strokeStyle = "#fcedb6";
+    ctx.lineWidth = 2.4;
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.quadraticCurveTo((a.x + ex) / 2, (a.y + ey) / 2 + sag, ex, ey);
     ctx.stroke();
+
+    // Ship chock fitting
+    ctx.fillStyle = "#1e2226";
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, 2.8, 0, 6.2832);
+    ctx.fill();
+
+    // Quay bollard/pole loop when attached
+    if (t >= 0.95) {
+      ctx.fillStyle = "#3a2e1d";
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 4.8, 0, 6.2832);
+      ctx.fill();
+      ctx.strokeStyle = "#fcedb6";
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 4.2, 0, 6.2832);
+      ctx.stroke();
+    }
   }
 }
 
@@ -752,7 +797,36 @@ export function drawRendezvousZone(
   ctx.font = "bold 11px Rubik, system-ui, sans-serif";
   ctx.fillStyle = inRange ? "rgba(255, 220, 140, 0.95)" : "rgba(180, 240, 255, 0.8)";
   ctx.textAlign = "center";
-  ctx.fillText(inRange ? "📯 TUG RENDEZVOUS [H]" : "PILOT STATION", rz.x, rz.y - 12);
+  ctx.fillText(inRange ? "PILOT STATION [T]" : "PILOT STATION", rz.x, rz.y - 12);
+  ctx.restore();
+}
+
+export function drawPilotBoundary(
+  ctx: CanvasRenderingContext2D,
+  pb: PilotBoundary,
+  time: number,
+  view: WorldView,
+) {
+  if (view.right < pb.minX - 50 || view.left > pb.minX + 50) return;
+  ctx.save();
+  ctx.setLineDash([8, 8]);
+  ctx.strokeStyle = "rgba(56, 225, 255, 0.35)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(pb.minX, Math.max(view.top, pb.minY));
+  ctx.lineTo(pb.minX, Math.min(view.bottom, pb.maxY));
+  ctx.stroke();
+
+  const offset = (time * 16) % 32;
+  ctx.save();
+  ctx.translate(pb.minX - 12, 0);
+  ctx.rotate(-Math.PI / 2);
+  ctx.font = "bold 11px Rubik, system-ui, sans-serif";
+  ctx.fillStyle = "rgba(56, 225, 255, 0.75)";
+  ctx.textAlign = "center";
+  ctx.fillText("⚓ PILOT AREA LIMIT · DETACH TUGS [T] BEYOND", 0 + offset, 0);
+  ctx.restore();
+
   ctx.restore();
 }
 
@@ -760,23 +834,64 @@ export function drawDepartureFairway(
   ctx: CanvasRenderingContext2D,
   time: number,
   view: WorldView,
+  exit?: DepartureExit,
 ) {
-  const exitX = -680;
-  if (view.left > exitX + 50 || view.right < exitX - 50) return;
+  const side = exit?.side ?? "west";
+  const threshold = exit?.threshold ?? -680;
+  const label = exit?.label ?? "WEST OCEAN FAIRWAY ⬅";
+
   ctx.save();
   ctx.setLineDash([12, 12]);
-  ctx.strokeStyle = "rgba(62, 242, 160, 0.5)";
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(exitX, Math.max(view.top, -800));
-  ctx.lineTo(exitX, Math.min(view.bottom, 800));
-  ctx.stroke();
+  ctx.strokeStyle = "rgba(62, 242, 160, 0.65)";
+  ctx.lineWidth = 3;
 
-  const offset = (time * 18) % 30;
-  ctx.font = "bold 12px Rubik, system-ui, sans-serif";
-  ctx.fillStyle = "rgba(62, 242, 160, 0.85)";
-  ctx.textAlign = "center";
-  ctx.fillText("⬅ OPEN SEA (CHANNEL EXIT)", exitX - 45, -120 + offset);
-  ctx.fillText("⬅ OPEN SEA (CHANNEL EXIT)", exitX - 45, 120 + offset);
+  if (side === "west") {
+    if (view.left > threshold + 50 || view.right < threshold - 50) {
+      ctx.restore();
+      return;
+    }
+    ctx.beginPath();
+    ctx.moveTo(threshold, Math.max(view.top, -800));
+    ctx.lineTo(threshold, Math.min(view.bottom, 800));
+    ctx.stroke();
+
+    const offset = (time * 18) % 30;
+    ctx.font = "bold 12px Rubik, system-ui, sans-serif";
+    ctx.fillStyle = "rgba(62, 242, 160, 0.95)";
+    ctx.textAlign = "center";
+    ctx.fillText(label, threshold - 50, -120 + offset);
+    ctx.fillText(label, threshold - 50, 120 + offset);
+  } else if (side === "north") {
+    if (view.bottom < threshold - 50 || view.top > threshold + 50) {
+      ctx.restore();
+      return;
+    }
+    ctx.beginPath();
+    ctx.moveTo(Math.max(view.left, -440), threshold);
+    ctx.lineTo(Math.min(view.right, -100), threshold);
+    ctx.stroke();
+
+    const offset = (time * 18) % 30;
+    ctx.font = "bold 12px Rubik, system-ui, sans-serif";
+    ctx.fillStyle = "rgba(62, 242, 160, 0.95)";
+    ctx.textAlign = "center";
+    ctx.fillText(label, -270, threshold - 24 - offset * 0.3);
+  } else if (side === "south") {
+    if (view.top > threshold + 50 || view.bottom < threshold - 50) {
+      ctx.restore();
+      return;
+    }
+    ctx.beginPath();
+    ctx.moveTo(Math.max(view.left, -440), threshold);
+    ctx.lineTo(Math.min(view.right, -100), threshold);
+    ctx.stroke();
+
+    const offset = (time * 18) % 30;
+    ctx.font = "bold 12px Rubik, system-ui, sans-serif";
+    ctx.fillStyle = "rgba(62, 242, 160, 0.95)";
+    ctx.textAlign = "center";
+    ctx.fillText(label, -270, threshold + 24 + offset * 0.3);
+  }
+
   ctx.restore();
 }

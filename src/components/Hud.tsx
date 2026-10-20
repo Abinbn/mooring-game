@@ -8,6 +8,7 @@ interface Props {
   onPause: () => void;
   onMute: () => void;
   onHorn: () => void;
+  onToggleTugs?: () => void;
 }
 
 function Chip({ ok, label }: { ok: boolean; label: string }) {
@@ -24,7 +25,7 @@ function Chip({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
-export default function Hud({ hud, touch, onPause, onMute, onHorn }: Props) {
+export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs }: Props) {
   const low = hud.timeLeft < 10 && !hud.introActive;
   const hullColor = hud.hull > 60 ? "#3ef2a0" : hud.hull > 30 ? "#ffb340" : "#ff5d5d";
   const curMag = Math.hypot(hud.current.x, hud.current.y);
@@ -43,34 +44,37 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn }: Props) {
           <div className="mt-0.5 flex items-center gap-2 text-[10px] font-bold tracking-wider text-amber-200/90 sm:text-xs">
             <span className="truncate">{hud.telegraph}</span>
             <span className="text-cyan-100/60">{speedKn} kn</span>
+            {Math.abs(hud.rudder) > 0.08 && (
+              <span className="text-cyan-300 font-extrabold">
+                {hud.rudder < 0 ? `PORT ${Math.round(Math.abs(hud.rudder) * 35)}° ◀` : `STBD ${Math.round(hud.rudder * 35)}° ▶`}
+              </span>
+            )}
           </div>
-          {hud.missionType !== "departure" && (
-            <div className="mt-1 flex items-center gap-1.5 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider">
-              {hud.tugState === "standby" ? (
-                hud.inRendezvousRange ? (
-                  <span className="flex items-center gap-1 text-amber-300 anim-blink">
-                    <span>📯</span>
-                    <span>Sound Horn [H] to Summon Tugs</span>
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1 text-cyan-200/50">
-                    <span>⚓</span>
-                    <span>Tugs on Standby (Approach Dock)</span>
-                  </span>
-                )
-              ) : hud.tugState === "approaching" ? (
-                <span className="flex items-center gap-1 text-amber-300">
-                  <span className="animate-spin text-[10px]">⚙</span>
-                  <span>Tugs Steaming Up...</span>
+          <div className="mt-1 flex items-center gap-1.5 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider">
+            {hud.tugState === "standby" ? (
+              hud.inRendezvousRange ? (
+                <span className="flex items-center gap-1 text-amber-300 anim-blink">
+                  <span>⚓</span>
+                  <span>Press [T] to Summon Tugs</span>
                 </span>
               ) : (
-                <span className="flex items-center gap-1 text-emerald-300/80">
-                  <span>✓</span>
-                  <span>Tugs Made Fast</span>
+                <span className="flex items-center gap-1 text-cyan-200/50">
+                  <span>⚓</span>
+                  <span>Tugs Standby · [T] in zone / Steer Solo</span>
                 </span>
-              )}
-            </div>
-          )}
+              )
+            ) : hud.tugState === "approaching" ? (
+              <span className="flex items-center gap-1 text-amber-300">
+                <span className="animate-spin text-[10px]">⚙</span>
+                <span>Tugs Steaming to Ship...</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-emerald-300/80">
+                <span>✓</span>
+                <span>Tugs Made Fast · [T] Cast Off</span>
+              </span>
+            )}
+          </div>
         </div>
 
         <div
@@ -98,11 +102,21 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn }: Props) {
           <div className="pointer-events-auto flex gap-1.5">
             <button
               type="button"
-              onClick={onHorn}
+              onClick={onToggleTugs}
               className={cn(
-                "btn-ghost relative flex h-9 w-9 items-center justify-center rounded-lg text-base font-black text-amber-200 hover:text-amber-100 cursor-pointer active:scale-95 transition-all",
-                hud.tugState === "standby" && hud.inRendezvousRange && "ring-2 ring-amber-400 bg-amber-400/20 shadow-[0_0_12px_rgba(255,179,64,0.6)]",
+                "btn-ghost relative flex h-9 w-9 items-center justify-center rounded-lg text-base font-black text-cyan-200 hover:text-cyan-100 cursor-pointer active:scale-95 transition-all",
+                hud.tugState === "attached" && "bg-cyan-500/25 ring-2 ring-cyan-300 shadow-[0_0_10px_rgba(56,225,255,0.4)] text-cyan-100",
+                hud.tugState === "standby" && hud.inRendezvousRange && "ring-2 ring-amber-400 bg-amber-400/20 text-amber-300 anim-blink shadow-[0_0_12px_rgba(255,179,64,0.6)]",
               )}
+              title={hud.tugState === "attached" ? "Detach Tugs [T]" : "Attach Tugs [T]"}
+              aria-label="Toggle Tugs"
+            >
+              <span>⚓</span>
+            </button>
+            <button
+              type="button"
+              onClick={onHorn}
+              className="btn-ghost relative flex h-9 w-9 items-center justify-center rounded-lg text-base font-black text-amber-200 hover:text-amber-100 cursor-pointer active:scale-95 transition-all"
               title="Ship Horn (H)"
               aria-label="Ship Horn"
             >
@@ -182,16 +196,27 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn }: Props) {
         )}
       </div>
 
-      {/* Alignment / Mission chips */}
+      {/* Alignment / Mission / Warning chips */}
       <div
-        className="absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5 sm:gap-2"
+        className="absolute left-1/2 flex -translate-x-1/2 flex-wrap justify-center items-center gap-1.5 sm:gap-2 px-2 max-w-[96vw]"
         style={{ bottom: touch ? "calc(200px + env(safe-area-inset-bottom))" : "calc(18px + env(safe-area-inset-bottom))" }}
       >
+        {hud.tugPenaltyWarning && (
+          <div className="flex items-center gap-1.5 rounded-full bg-red-600/95 px-3 py-1 text-[10px] sm:text-xs font-black tracking-wider text-white ring-2 ring-red-300 shadow-[0_0_16px_rgba(255,93,93,0.8)] anim-blink">
+            <span>⚠️</span>
+            <span>DETACH TUGS [T] OUTSIDE PILOT ZONE (-5 PTS)</span>
+          </div>
+        )}
+
         {hud.missionType === "departure" ? (
           <>
-            <Chip ok={hud.speed > 1} label="PROPULSION" />
-            <Chip ok={true} label="TUGS ATTACHED" />
-            <Chip ok={false} label="⬅ STEER TO SEA" />
+            <Chip ok={hud.speed > 0.8} label="PROPULSION" />
+            <Chip ok={hud.tugState === "attached"} label={hud.tugState === "attached" ? "TUGS ATTACHED" : "TUGS DETACHED"} />
+            {hud.departureExit && (
+              <div className="flex items-center gap-1.5 rounded-full bg-emerald-400/20 px-3 py-1 text-[10px] sm:text-xs font-black tracking-wider text-emerald-200 ring-1 ring-emerald-300/60">
+                <span>{hud.departureExit.label}</span>
+              </div>
+            )}
           </>
         ) : (
           <>

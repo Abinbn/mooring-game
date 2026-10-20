@@ -33,7 +33,15 @@ import {
   TUG_RAMP,
   TUG_W,
 } from "./constants";
-import { makeLevel, type BuoyDef, type LevelDef, type MissionType, type ShipVisual } from "./levels";
+import {
+  makeLevel,
+  type BuoyDef,
+  type DepartureExit,
+  type LevelDef,
+  type MissionType,
+  type PilotBoundary,
+  type ShipVisual,
+} from "./levels";
 import {
   angleDiff,
   circleVsPolygon,
@@ -58,6 +66,7 @@ import {
   drawDepartureFairway,
   drawGhost,
   drawMooringLines,
+  drawPilotBoundary,
   drawQuayBase,
   drawRendezvousZone,
   drawRocks,
@@ -100,7 +109,7 @@ export interface Breakdown {
 export interface GameOverInfo {
   score: number;
   level: number;
-  reason: "wrecked" | "timeout";
+  reason: "wrecked" | "timeout" | "tug_open_sea";
   moorings: number;
   bumps: number;
   perfects: number;
@@ -133,6 +142,9 @@ export interface HudData {
   speed: number;
   muted: boolean;
   tutorial?: TutorialInfo;
+  rudder: number;
+  tugPenaltyWarning: boolean;
+  departureExit?: DepartureExit;
 }
 
 export interface GameCallbacks {
@@ -219,6 +231,8 @@ export class Game {
   private angVel = 0;
   private throttle = 0;
   private throttleTarget = 0;
+  private rudder = 0;
+  private rudderTarget = 0;
   private tugs: Tug[] = [];
   private buoys: Buoy[] = [];
   private shipVis: ShipVisual;
@@ -248,14 +262,16 @@ export class Game {
   // Tugboat attachment state
   private tugState: TugAttachmentState = "standby";
   private tugAttachTimer = 0;
+  private tugPenaltyTimer = 0;
 
   // Tutorial state
   private tutorialStep = 0;
   private tutorialStepTimer = 0;
   private tutorialStepCompleted = false;
 
-  // Departure state
+  // Departure & Mooring lines state
   private departureCleared = false;
+  private mooringLinesAttached = false;
 
   // Camera / juice
   private cam = { x: 0, y: 0, zoom: 1.5 };
@@ -337,6 +353,51 @@ export class Game {
     return dx * dx + dy * dy <= rz.radius * rz.radius || (this.pos.x > rz.x - 50 && Math.abs(dy) <= rz.radius);
   }
 
+  isInPilotArea(): boolean {
+    const pb = this.level?.pilotBoundary;
+    if (!pb) return true;
+    return (
+      this.pos.x >= pb.minX &&
+      this.pos.x <= pb.maxX &&
+      this.pos.y >= pb.minY &&
+      this.pos.y <= pb.maxY
+    );
+  }
+
+  toggleTugs() {
+    if (this.phase !== "playing") return;
+    this.audio.ensure();
+
+    if (this.tugState === "attached") {
+      this.tugState = "standby";
+      for (const t of this.tugs) {
+        t.effort = 0;
+        t.cmd = 0;
+      }
+      this.audio.splash();
+      this.audio.tugToot(35);
+      this.particles.burst(this.tugs[0].worldPos.x, this.tugs[0].worldPos.y, "foam", 12, 22);
+      this.particles.burst(this.tugs[1].worldPos.x, this.tugs[1].worldPos.y, "foam", 12, 22);
+      this.addText(this.pos.x, this.pos.y - SHIP_W - 22, "TUGS DETACHED / STANDBY", "#38e1ff", 20);
+    } else if (this.tugState === "standby") {
+      if (
+        this.isInPilotArea() &&
+        (this.isInRendezvousRange() || this.level.missionType === "departure" || this.level.missionType === "tutorial")
+      ) {
+        this.tugState = "approaching";
+        this.tugAttachTimer = 1.4;
+        this.audio.tugToot(0);
+        this.addText(this.pos.x, this.pos.y - SHIP_W - 22, "TUGS STEAMING TO ATTACH", "#3ef2a0", 20);
+        setTimeout(() => {
+          if (this.phase === "playing") this.audio.tugToot(40);
+        }, 360);
+      } else {
+        this.audio.bump();
+        this.addText(this.pos.x, this.pos.y - SHIP_W - 22, "OUTSIDE PILOT ZONE — CANNOT ATTACH", "#ff5d5d", 18);
+      }
+    }
+  }
+
   soundHorn() {
     if (this.phase !== "playing") return;
     this.audio.ensure();
@@ -354,30 +415,13 @@ export class Game {
     this.addText(this.pos.x, this.pos.y - SHIP_W - 10, "📯 HOOOORN!", "#ffd97d", 20);
     this.trauma = Math.min(1, this.trauma + 0.08);
 
-    // Dynamic tugboat attachment summons
-    if (this.tugState === "standby") {
-      if (this.isInRendezvousRange() || this.level.missionType === "tutorial") {
-        this.tugState = "approaching";
-        this.tugAttachTimer = 1.8;
-        this.addText(this.pos.x, this.pos.y - SHIP_W - 32, "TUGS RESPONDING!", "#3ef2a0", 20);
-        setTimeout(() => {
-          if (this.phase === "playing") this.audio.tugToot(0);
-        }, 320);
-        setTimeout(() => {
-          if (this.phase === "playing") this.audio.tugToot(60);
-        }, 650);
-      } else {
-        this.addText(this.pos.x, this.pos.y - SHIP_W - 32, "OUT OF TUG RANGE — APPROACH DOCK", "#ffb340", 15);
-      }
-    } else {
-      // Tugboats call-and-response whistle when attached
-      setTimeout(() => {
-        if (this.phase === "playing") this.audio.tugToot(0);
-      }, 420);
-      setTimeout(() => {
-        if (this.phase === "playing") this.audio.tugToot(50);
-      }, 720);
-    }
+    // Decorative tug call-and-response whistle
+    setTimeout(() => {
+      if (this.phase === "playing") this.audio.tugToot(0);
+    }, 380);
+    setTimeout(() => {
+      if (this.phase === "playing") this.audio.tugToot(55);
+    }, 700);
   }
 
   startTutorial() {
@@ -526,6 +570,9 @@ export class Game {
       speed: spd,
       muted: this.audio.muted,
       tutorial: this.getTutorialInfo(),
+      rudder: this.rudder,
+      tugPenaltyWarning: this.tugState === "attached" && !this.isInPilotArea(),
+      departureExit: this.level.departureExit,
     };
   }
 
@@ -546,6 +593,8 @@ export class Game {
     this.angVel = 0;
     this.throttle = 0;
     this.throttleTarget = 0;
+    this.rudder = 0;
+    this.rudderTarget = 0;
     this.timeLeft = lv.timeLimit;
     this.introTimer = attract ? 0 : 2.6;
     this.secure = 0;
@@ -566,6 +615,8 @@ export class Game {
     this.keys.clear();
     this.recomputeInput();
     this.departureCleared = false;
+    this.mooringLinesAttached = lv.missionType === "departure";
+    this.tugPenaltyTimer = 0;
     this.tutorialStep = 0;
     this.tutorialStepTimer = 0;
     this.tutorialStepCompleted = false;
@@ -636,6 +687,11 @@ export class Game {
     if (e.code === "KeyH" && this.phase === "playing") {
       e.preventDefault();
       this.soundHorn();
+      return;
+    }
+    if (e.code === "KeyT" && this.phase === "playing") {
+      e.preventDefault();
+      this.toggleTugs();
       return;
     }
     if (KEYMAP[e.code]) {
@@ -772,6 +828,10 @@ export class Game {
     // Commands
     if (playing) {
       this.throttleTarget = this.input.ahead ? 1 : this.input.astern ? -1 : 0;
+      const helmLeft = this.input.bowLeft || this.input.sternLeft;
+      const helmRight = this.input.bowRight || this.input.sternRight;
+      this.rudderTarget = helmRight ? 1 : helmLeft ? -1 : 0;
+
       if (this.tugState === "attached") {
         this.tugs[0].cmd = (this.input.bowRight ? 1 : 0) - (this.input.bowLeft ? 1 : 0);
         this.tugs[1].cmd = (this.input.sternRight ? 1 : 0) - (this.input.sternLeft ? 1 : 0);
@@ -781,10 +841,12 @@ export class Game {
       }
     } else {
       this.throttleTarget = 0;
+      this.rudderTarget = 0;
       this.tugs[0].cmd = 0;
       this.tugs[1].cmd = 0;
     }
     this.throttle = damp(this.throttle, this.throttleTarget, ENGINE_RAMP, dt);
+    this.rudder = damp(this.rudder, this.rudderTarget, 4.0, dt);
     for (const t of this.tugs) t.effort = damp(t.effort, t.cmd, TUG_RAMP, dt);
 
     // Forces (mass = 1)
@@ -813,6 +875,24 @@ export class Game {
     const ry = this.vel.y - cur.y;
     const u = rx * fwd.x + ry * fwd.y;
     const v = rx * right.x + ry * right.y;
+
+    // Rudder hydrodynamics: water flow over rudder at stern
+    // v_flow includes forward hull speed through water (u) plus propeller slipstream/wash
+    const propWash = Math.max(0, this.throttle) * 7.5;
+    const vFlow = u + propWash;
+    if (Math.abs(vFlow) > 0.04 || Math.abs(this.rudder) > 0.04) {
+      const sternArm = -SHIP_L * 0.48;
+      const rudderLift = this.rudder * (vFlow * 1.5 + Math.sign(vFlow) * vFlow * vFlow * 0.06);
+      const fRudderRight = -rudderLift;
+      fx += right.x * fRudderRight;
+      fy += right.y * fRudderRight;
+      torque += sternArm * fRudderRight;
+
+      const rDrag = Math.abs(this.rudder) * Math.abs(vFlow) * 0.35;
+      fx -= fwd.x * rDrag;
+      fy -= fwd.y * rDrag;
+    }
+
     const dLong = -(K_LONG * u + C_LONG * u * Math.abs(u));
     const dLat = -(K_LAT * v + C_LAT * v * Math.abs(v));
     fx += fwd.x * dLong + right.x * dLat;
@@ -835,6 +915,32 @@ export class Game {
 
     this.collide(dt);
     this.updateBuoys(dt);
+
+    // Departure mooring line release when pulling away from quay
+    if (this.mooringLinesAttached && this.level.missionType === "departure") {
+      const distFromQuay = QUAY_X - this.pos.x - SHIP_W / 2;
+      const speed = Math.hypot(this.vel.x, this.vel.y);
+      const tugPulling = this.tugs.some((t) => Math.abs(t.effort) > 0.25);
+      if (distFromQuay > MOOR_DIST_MAX + 6 || Math.abs(this.throttle) > 0.15 || speed > 0.8 || tugPulling) {
+        this.mooringLinesAttached = false;
+        this.audio.splash();
+        this.particles.burst(QUAY_X - 2, this.pos.y, "foam", 14, 30);
+        this.addText(this.pos.x, this.pos.y - SHIP_W - 16, "LINES CAST OFF!", "#ffd97d", 20);
+      }
+    }
+
+    // Tug pilot boundary violation check (-5 pts penalty)
+    if (playing && this.tugState === "attached" && !this.isInPilotArea()) {
+      this.tugPenaltyTimer += dt;
+      if (this.tugPenaltyTimer >= 0.7) {
+        this.tugPenaltyTimer = 0;
+        this.score = Math.max(0, this.score - 5);
+        this.audio.bump();
+        this.addText(this.pos.x, this.pos.y - SHIP_W - 25, "-5 PTS: TUGS OUTSIDE PILOT AREA", "#ff5d5d", 16);
+      }
+    } else {
+      this.tugPenaltyTimer = 0;
+    }
 
     if (playing) {
       if (this.level.missionType === "tutorial") {
@@ -1094,6 +1200,7 @@ export class Game {
     this.stats.moorings++;
     this.hull = Math.min(100, this.hull + HULL_REPAIR_PER_LEVEL);
     this.secure = 1;
+    this.mooringLinesAttached = true;
     this.levelClearTimer = 3.4;
 
     this.audio.success();
@@ -1124,9 +1231,25 @@ export class Game {
   }
 
   private checkDeparture() {
-    if (this.pos.x <= -680) {
-      this.departureCleared = true;
-      this.clearDeparture();
+    const exit = this.level.departureExit;
+    const side = exit?.side ?? "west";
+    const threshold = exit?.threshold ?? -680;
+    let reached = false;
+    if (side === "west") {
+      reached = this.pos.x <= threshold;
+    } else if (side === "north") {
+      reached = this.pos.y <= threshold;
+    } else if (side === "south") {
+      reached = this.pos.y >= threshold;
+    }
+
+    if (reached) {
+      if (this.tugState === "attached") {
+        this.gameOver("tug_open_sea");
+      } else {
+        this.departureCleared = true;
+        this.clearDeparture();
+      }
     }
   }
 
@@ -1195,9 +1318,9 @@ export class Game {
         keyHint: touch ? "▼ ASTERN" : "[S] or [↓]",
       },
       {
-        title: "TUG RENDEZVOUS & HORN",
-        instruction: "Sound your ship foghorn to summon standby tugboats to make fast.",
-        keyHint: touch ? "📯 HORN" : "[H] or 📯",
+        title: "TUG RENDEZVOUS & ATTACH",
+        instruction: "Approach the pilot station and press [T] to summon and attach standby tugboats.",
+        keyHint: touch ? "⚓ TUGS" : "[T] or ⚓",
       },
       {
         title: "BOW TUG (FORWARD)",
@@ -1392,7 +1515,7 @@ export class Game {
     this.setPhase("levelClear", breakdown);
   }
 
-  private gameOver(reason: "wrecked" | "timeout") {
+  private gameOver(reason: "wrecked" | "timeout" | "tug_open_sea") {
     clearSavedRun();
     this.audio.silenceLoops();
     this.audio.gameOver();
@@ -1471,8 +1594,32 @@ export class Game {
       for (const t of this.tugs) {
         const bobX = Math.sin(this.time * 1.5 + t.phase) * 1.4;
         const bobY = Math.cos(this.time * 1.2 + t.phase) * 1.4;
-        t.worldPos = { x: t.standbyPos.x + bobX, y: t.standbyPos.y + bobY };
-        t.worldAngle = Math.PI + Math.sin(this.time * 1.6 + t.phase) * 0.06;
+        const targetX = t.standbyPos.x + bobX;
+        const targetY = t.standbyPos.y + bobY;
+        const dx = targetX - t.worldPos.x;
+        const dy = targetY - t.worldPos.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 8) {
+          const moveAngle = Math.atan2(dy, dx);
+          t.worldPos.x = damp(t.worldPos.x, targetX, 2.0, dt);
+          t.worldPos.y = damp(t.worldPos.y, targetY, 2.0, dt);
+          t.worldAngle = dampAngle(t.worldAngle, moveAngle, 3.5, dt);
+
+          t.emitAcc += dt * 30;
+          while (t.emitAcc >= 1) {
+            t.emitAcc -= 1;
+            const fx = Math.cos(t.worldAngle);
+            const fy = Math.sin(t.worldAngle);
+            const sx = t.worldPos.x - fx * (TUG_L / 2);
+            const sy = t.worldPos.y - fy * (TUG_L / 2);
+            this.particles.foam(sx, sy, -fx * 20, -fy * 20, 1.5, 0.6);
+          }
+        } else {
+          t.worldPos.x = damp(t.worldPos.x, targetX, 3.0, dt);
+          t.worldPos.y = damp(t.worldPos.y, targetY, 3.0, dt);
+          t.worldAngle = dampAngle(t.worldAngle, Math.PI + Math.sin(this.time * 1.6 + t.phase) * 0.06, 2.5, dt);
+        }
       }
       return;
     }
@@ -1724,6 +1871,11 @@ export class Game {
     drawCurrentLines(ctx, view, this.time, cur);
     drawRocks(ctx, this.level.rocks, this.time, pal, view);
 
+    // Pilot area boundary limit line
+    if (this.level.pilotBoundary) {
+      drawPilotBoundary(ctx, this.level.pilotBoundary, this.time, view);
+    }
+
     // Rendezvous zone for summoning standby tugs
     if (this.tugState === "standby" && this.level.rendezvous && (this.level.missionType === "arrival" || this.level.missionType === "tutorial")) {
       drawRendezvousZone(ctx, this.level.rendezvous, this.time, this.isInRendezvousRange());
@@ -1731,7 +1883,7 @@ export class Game {
 
     // Departure fairway
     if (this.level.missionType === "departure" || (this.level.missionType === "tutorial" && this.tutorialStep >= 7)) {
-      drawDepartureFairway(ctx, this.time, view);
+      drawDepartureFairway(ctx, this.time, view, this.level.departureExit);
     }
 
     if (this.level.missionType === "arrival" || (this.level.missionType === "tutorial" && this.tutorialStep <= 6)) {
@@ -1787,6 +1939,7 @@ export class Game {
       damage: 1 - this.hull / 100,
       lights: pal.lights,
       wrecked: this.wrecked,
+      rudder: this.rudder,
     });
 
     // Tugs
@@ -1795,9 +1948,11 @@ export class Game {
     // Buoys
     for (const b of this.buoys) drawBuoy(ctx, b.pos, b.def.color, this.time, b.phase, pal.lights);
 
-    // Mooring lines
-    if (this.secure > 0.02) {
+    // Mooring lines (drawn when secured/securing or when moored at berth)
+    if (this.secure > 0.02 || this.mooringLinesAttached) {
       const hl = SHIP_L / 2;
+      const c = Math.cos(this.heading);
+      const s = Math.sin(this.heading);
       const from = [
         { lx: hl - 6, ly: SHIP_W / 2 - 1 },
         { lx: -hl + 6, ly: SHIP_W / 2 - 1 },
@@ -1808,7 +1963,8 @@ export class Game {
         return { x: this.pos.x + p.lx * c - ly * s, y: this.pos.y + p.lx * s + ly * c };
       });
       const to = from.map((f, i) => ({ x: QUAY_X + 15, y: Math.round((f.y + (i % 2 === 0 ? -22 : 22)) / 36) * 36 }));
-      drawMooringLines(ctx, from, to, this.secure);
+      const progress = this.mooringLinesAttached ? 1.0 : this.secure;
+      drawMooringLines(ctx, from, to, progress);
     }
 
     drawCraneOverhead(ctx, this.level, view, this.time);

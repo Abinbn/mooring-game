@@ -201,171 +201,193 @@ const PROC_NAMES = [
 ];
 
 export function makeLevel(index: number, runSeed: number): LevelDef {
-  const { quay, rocks } = baseObstacles();
   const seed = (runSeed + index * 7919) >>> 0;
   const r = rng(seed);
-  const obstacles: Obstacle[] = [quay, ...rocks];
-  const buoys: BuoyDef[] = [];
   const up = -Math.PI / 2;
 
-  const base: Omit<LevelDef, "name" | "tipKeys" | "tipTouch" | "start" | "timeLimit"> = {
+  const pilotBoundary: PilotBoundary = {
+    minX: -460,
+    maxX: QUAY_X + 20,
+    minY: -620,
+    maxY: 620,
+  };
+
+  if (index === 0) {
+    const { quay, rocks } = baseObstacles();
+    const obstacles: Obstacle[] = [quay, ...rocks];
+    return {
+      index: 0,
+      berthNumber: "ACADEMY",
+      missionType: "tutorial",
+      name: "Pilot Academy",
+      tipKeys: "Welcome to Pilot Academy. Follow the on-screen instructions to learn shiphandling.",
+      tipTouch: "Welcome to Pilot Academy. Follow the on-screen instructions to learn shiphandling.",
+      start: { pos: { x: -320, y: 160 }, heading: up },
+      current: { x: 0, y: 0 },
+      gust: 0,
+      gustPeriod: 9,
+      timeLimit: 9999,
+      berth: { y: 0, halfLen: SHIP_L / 2 + 45, tolAlong: 32, tolAngle: rad(9) },
+      rendezvous: { x: -200, y: 0, radius: 260 },
+      pilotBoundary,
+      obstacles,
+      buoys: [],
+      timeOfDay: "day",
+      containers: containersFor(seed),
+      rocks,
+    };
+  }
+
+  if (index === 1) {
+    const { quay, rocks } = baseObstacles();
+    const obstacles: Obstacle[] = [quay, ...rocks];
+    return {
+      index: 1,
+      berthNumber: "B1",
+      missionType: "arrival",
+      name: "First Berth",
+      tipKeys: "Approach dock. Press [T] to summon tugs, or steer solo with [A]/[D] to dock unassisted!",
+      tipTouch: "Approach dock. Tap [T] to summon tugs, or steer solo with rudder to dock unassisted!",
+      start: { pos: { x: -260, y: 60 }, heading: up },
+      current: { x: 0, y: 0 },
+      gust: 0,
+      gustPeriod: 9,
+      timeLimit: 75,
+      berth: { y: 0, halfLen: SHIP_L / 2 + 40, tolAlong: 28, tolAngle: rad(7) },
+      rendezvous: { x: -180, y: 0, radius: 240 },
+      pilotBoundary,
+      obstacles,
+      buoys: [],
+      timeOfDay: "day",
+      containers: containersFor(seed),
+      rocks,
+    };
+  }
+
+  // Levels 2+: Randomized Arrival vs Departure (~42% Departure chance)
+  const isDeparture = r() < 0.42;
+  const missionType: MissionType = isDeparture ? "departure" : "arrival";
+
+  // Randomize departure exit: West (45%), North (28%), South (27%)
+  const rSide = r();
+  const exitSide: DepartureSide = rSide < 0.45 ? "west" : rSide < 0.73 ? "north" : "south";
+  const narrowPassage = isDeparture && (index === 2 || r() < 0.52);
+
+  const { quay, rocks } = baseObstacles(isDeparture ? exitSide : undefined);
+  const obstacles: Obstacle[] = [quay, ...rocks];
+  const buoys: BuoyDef[] = [];
+
+  let departureExit: DepartureExit | undefined = undefined;
+  if (isDeparture) {
+    departureExit = {
+      side: exitSide,
+      label:
+        exitSide === "west"
+          ? "WEST OCEAN FAIRWAY ⬅"
+          : exitSide === "north"
+          ? "NORTH STRAIT CHANNEL ⬆"
+          : "SOUTH SOUND PASSAGE ⬇",
+      threshold: exitSide === "west" ? -680 : exitSide === "north" ? -750 : 750,
+    };
+
+    if (narrowPassage) {
+      // Spawn narrow passage gate buoys (gap 50m — cargo ship fits solo, tugs attached will hit!)
+      if (exitSide === "west") {
+        buoys.push({ anchor: { x: -480, y: -26 }, color: "#ff5d5d" });
+        buoys.push({ anchor: { x: -480, y: 26 }, color: "#3ef2a0" });
+      } else if (exitSide === "north") {
+        buoys.push({ anchor: { x: -290, y: -480 }, color: "#ff5d5d" });
+        buoys.push({ anchor: { x: -238, y: -480 }, color: "#3ef2a0" });
+      } else {
+        buoys.push({ anchor: { x: -290, y: 480 }, color: "#ff5d5d" });
+        buoys.push({ anchor: { x: -238, y: 480 }, color: "#3ef2a0" });
+      }
+    }
+  }
+
+  const d = Math.max(1, index - 2);
+  const dist = 240 + r() * 220;
+  const alongMag = 140 + r() * Math.min(520, 120 + d * 60);
+  const along = (r() < 0.5 ? -1 : 1) * alongMag;
+  const tilt = (r() - 0.5) * 2 * rad(Math.min(75, 18 + d * 7));
+  const flipped = !isDeparture && d >= 3 && r() < 0.3;
+  const heading = up + tilt + (flipped ? Math.PI : 0);
+
+  const curMag = Math.min(6, 1.0 + d * 0.5) * (0.5 + r() * 0.5);
+  const curAng = (r() < 0.5 ? Math.PI / 2 : -Math.PI / 2) + (r() - 0.5) * rad(70);
+  const current = { x: Math.cos(curAng) * curMag, y: Math.sin(curAng) * curMag };
+
+  const start = isDeparture
+    ? { x: QUAY_X - SHIP_W / 2 - 2, y: 0 }
+    : { x: -dist, y: along };
+
+  // Approach buoys
+  const nBuoys = Math.min(4, 1 + Math.floor(r() * (d + 1)));
+  for (let i = 0; i < nBuoys; i++) {
+    const t = 0.25 + r() * 0.5;
+    const px = start.x + (-SHIP_W / 2 - 1 - start.x) * t + (r() - 0.5) * 220;
+    const py = start.y + (0 - start.y) * t + (r() - 0.5) * 260;
+    if (Math.hypot(px - start.x, py - start.y) < 110) continue;
+    if (px > -70 && Math.abs(py) < SHIP_L / 2 + 70) continue;
+    if (px > -40) continue;
+    buoys.push({ anchor: { x: px, y: py }, color: r() < 0.5 ? "#ff5d5d" : "#3ef2a0" });
+  }
+
+  // Moored neighbour ships
+  const halfLen = SHIP_L / 2 + Math.max(26, 60 - d * 6);
+  if (d >= 2 || r() < 0.5) {
+    const n1L = 100 + r() * 40;
+    obstacles.push(mooredShip(-(halfLen + 4 + n1L / 2), r() < 0.5 ? up : -up, n1L, 20 + r() * 4, seed + 11));
+  }
+  if (d >= 3 || r() < 0.4) {
+    const n2L = 100 + r() * 50;
+    obstacles.push(mooredShip(halfLen + 4 + n2L / 2, r() < 0.5 ? up : -up, n2L, 20 + r() * 4, seed + 12));
+  }
+
+  const tod: TimeOfDay = (["day", "dusk", "night"] as TimeOfDay[])[index % 3];
+
+  let tipKeys = "";
+  let tipTouch = "";
+  if (isDeparture) {
+    const dirTxt = exitSide === "west" ? "West [⬅]" : exitSide === "north" ? "North [⬆]" : "South [⬇]";
+    if (narrowPassage) {
+      tipKeys = `Outbound to ${dirTxt}. NARROW PASSAGE: Detach tugs with [T] before gate! Dragging tugs to sea fails contract.`;
+      tipTouch = `Outbound to ${dirTxt}. NARROW PASSAGE: Detach tugs with [T] before gate! Dragging tugs to sea fails contract.`;
+    } else {
+      tipKeys = `Outbound to ${dirTxt}. Unmoor with tugs, then detach [T] before leaving pilot sector (-5 pts/tick).`;
+      tipTouch = `Outbound to ${dirTxt}. Unmoor with tugs, then detach [T] before leaving pilot sector.`;
+    }
+  } else {
+    tipKeys = "Approach dock. Press [T] to summon tugs in pilot zone, or steer with [A]/[D] to dock unassisted!";
+    tipTouch = "Approach dock. Tap [T] to summon tugs in pilot zone, or steer with rudder to dock unassisted!";
+  }
+
+  return {
     index,
-    berthNumber: index === 0 ? "ACADEMY" : `B${((index - 1) % 9) + 1}`,
-    missionType: index === 0 ? "tutorial" : index % 2 === 0 ? "departure" : "arrival",
-    current: { x: 0, y: 0 },
-    gust: 0,
-    gustPeriod: 9,
-    berth: { y: 0, halfLen: SHIP_L / 2 + 40, tolAlong: 28, tolAngle: rad(7) },
-    rendezvous: { x: -200, y: 0, radius: 260 },
+    berthNumber: `B${((index - 1) % 9) + 1}`,
+    missionType,
+    departureExit,
+    narrowPassage,
+    pilotBoundary,
+    name: isDeparture ? `Outbound ${exitSide.toUpperCase()} ${index}` : PROC_NAMES[(index - 2) % PROC_NAMES.length],
+    tipKeys,
+    tipTouch,
+    start: { pos: start, heading: isDeparture ? up : heading },
+    current,
+    gust: d >= 3 ? 0.5 : 0,
+    gustPeriod: 7 + r() * 5,
+    timeLimit: Math.max(50, 92 - d * 4),
+    berth: {
+      y: 0,
+      halfLen,
+      tolAlong: Math.max(14, 26 - d * 1.5),
+      tolAngle: rad(Math.max(3.5, 6.5 - d * 0.35)),
+    },
+    rendezvous: { x: -200, y: 0, radius: 240 },
     obstacles,
     buoys,
-    timeOfDay: "day",
+    timeOfDay: tod,
     containers: containersFor(seed),
     rocks,
   };
-
-  switch (index) {
-    case 0:
-      return {
-        ...base,
-        index: 0,
-        berthNumber: "ACADEMY",
-        missionType: "tutorial",
-        name: "Pilot Academy",
-        tipKeys: "Welcome to Pilot Academy. Follow the on-screen instructions to learn shiphandling.",
-        tipTouch: "Welcome to Pilot Academy. Follow the on-screen instructions to learn shiphandling.",
-        start: { pos: { x: -320, y: 160 }, heading: up },
-        current: { x: 0, y: 0 },
-        gust: 0,
-        timeLimit: 9999,
-        rendezvous: { x: -200, y: 0, radius: 260 },
-        berth: { y: 0, halfLen: SHIP_L / 2 + 45, tolAlong: 32, tolAngle: rad(9) },
-        timeOfDay: "day",
-      };
-    case 1:
-      return {
-        ...base,
-        missionType: "arrival",
-        name: "First Berth",
-        tipKeys: "Approach the dock and sound horn [H] to summon tugs, then push into the berth.",
-        tipTouch: "Approach the dock and tap 📯 horn to summon tugs, then push into the berth.",
-        start: { pos: { x: -260, y: 60 }, heading: up },
-        rendezvous: { x: -180, y: 0, radius: 240 },
-        timeLimit: 75,
-      };
-    case 2:
-      return {
-        ...base,
-        missionType: "departure",
-        name: "Outbound Departure",
-        tipKeys: "Peel away from the quay with tugs (Q + A / ◀), then throttle ahead to the open channel.",
-        tipTouch: "Peel away from the quay with tugs (◀), then throttle ahead to the open channel.",
-        start: { pos: { x: QUAY_X - SHIP_W / 2 - 2, y: 0 }, heading: up },
-        timeLimit: 85,
-      };
-    case 3:
-      return {
-        ...base,
-        missionType: "arrival",
-        name: "Angle of Approach",
-        tipKeys: "Summon tugs with horn [H], swing the head with Q/E, and align with the quay.",
-        tipTouch: "Summon tugs with 📯 horn, swing the head with tugs, and align with the quay.",
-        start: { pos: { x: -280, y: 80 }, heading: up + rad(28) },
-        rendezvous: { x: -200, y: 20, radius: 250 },
-        timeLimit: 85,
-      };
-    case 4:
-      return {
-        ...base,
-        missionType: "departure",
-        name: "Fairway Departure",
-        tipKeys: "Unmoor and push clear of the quay into the outgoing fairway channel to open sea.",
-        tipTouch: "Unmoor and push clear of the quay into the outgoing fairway channel to open sea.",
-        start: { pos: { x: QUAY_X - SHIP_W / 2 - 2, y: 0 }, heading: up },
-        current: { x: -1.2, y: 2.2 },
-        timeLimit: 90,
-        timeOfDay: "dusk",
-      };
-    case 5: {
-      obstacles.push(mooredShip(-(SHIP_L / 2 + 42 + 55), up, 110, 20, seed + 1));
-      obstacles.push(mooredShip(SHIP_L / 2 + 42 + 60, -up, 120, 22, seed + 2));
-      return {
-        ...base,
-        missionType: "arrival",
-        name: "Tight Squeeze",
-        tipKeys: "Neighbours on both sides. Summon tugs and square up before committing.",
-        tipTouch: "Neighbours on both sides. Summon tugs and square up before committing.",
-        start: { pos: { x: -320, y: -60 }, heading: up + rad(35) },
-        berth: { y: 0, halfLen: SHIP_L / 2 + 42, tolAlong: 22, tolAngle: rad(6) },
-        rendezvous: { x: -220, y: 0, radius: 240 },
-        timeLimit: 95,
-        timeOfDay: "dusk",
-      };
-    }
-    default: {
-      const d = index - 5; // difficulty step ≥ 1
-      const isDeparture = index % 2 === 0;
-      const dist = 240 + r() * 220;
-      const alongMag = 140 + r() * Math.min(520, 120 + d * 60);
-      const along = (r() < 0.5 ? -1 : 1) * alongMag;
-      const tilt = (r() - 0.5) * 2 * rad(Math.min(75, 18 + d * 7));
-      const flipped = !isDeparture && d >= 3 && r() < 0.3;
-      const heading = up + tilt + (flipped ? Math.PI : 0);
-
-      const curMag = Math.min(6, 1.2 + d * 0.55) * (0.5 + r() * 0.5);
-      const curAng = (r() < 0.5 ? Math.PI / 2 : -Math.PI / 2) + (r() - 0.5) * rad(70);
-      const current = { x: Math.cos(curAng) * curMag, y: Math.sin(curAng) * curMag };
-
-      // Buoys scattered along the approach
-      const nBuoys = Math.min(4, 1 + Math.floor(r() * (d + 1)));
-      const start = isDeparture
-        ? { x: QUAY_X - SHIP_W / 2 - 2, y: 0 }
-        : { x: -dist, y: along };
-      for (let i = 0; i < nBuoys; i++) {
-        const t = 0.25 + r() * 0.5;
-        const px = start.x + (-SHIP_W / 2 - 1 - start.x) * t + (r() - 0.5) * 220;
-        const py = start.y + (0 - start.y) * t + (r() - 0.5) * 260;
-        if (Math.hypot(px - start.x, py - start.y) < 110) continue;
-        if (px > -70 && Math.abs(py) < SHIP_L / 2 + 70) continue;
-        if (px > -40) continue;
-        buoys.push({ anchor: { x: px, y: py }, color: r() < 0.5 ? "#ff5d5d" : "#3ef2a0" });
-      }
-
-      // Neighbouring moored ships, tighter with difficulty
-      const halfLen = SHIP_L / 2 + Math.max(26, 60 - d * 6);
-      if (d >= 2 || r() < 0.5) {
-        const n1L = 100 + r() * 40;
-        obstacles.push(mooredShip(-(halfLen + 4 + n1L / 2), r() < 0.5 ? up : -up, n1L, 20 + r() * 4, seed + 11));
-      }
-      if (d >= 3 || r() < 0.4) {
-        const n2L = 100 + r() * 50;
-        obstacles.push(mooredShip(halfLen + 4 + n2L / 2, r() < 0.5 ? up : -up, n2L, 20 + r() * 4, seed + 12));
-      }
-
-      const tod: TimeOfDay = (["dusk", "night", "day"] as TimeOfDay[])[(index + 1) % 3];
-      return {
-        ...base,
-        missionType: isDeparture ? "departure" : "arrival",
-        name: isDeparture ? `Outbound Run ${index}` : PROC_NAMES[(index - 6) % PROC_NAMES.length],
-        tipKeys: isDeparture
-          ? "Unmoor with tugs and steer out through the buoy channel to open sea."
-          : "Watch the current and sound horn [H] to summon tugs.",
-        tipTouch: isDeparture
-          ? "Unmoor with tugs and steer out through the buoy channel to open sea."
-          : "Watch the current and sound horn to summon tugs.",
-        start: { pos: start, heading: isDeparture ? up : heading },
-        current,
-        gust: d >= 3 ? 0.5 : 0,
-        gustPeriod: 7 + r() * 5,
-        timeLimit: Math.max(50, 92 - d * 4),
-        berth: {
-          y: 0,
-          halfLen,
-          tolAlong: Math.max(14, 26 - d * 1.5),
-          tolAngle: rad(Math.max(3.5, 6.5 - d * 0.35)),
-        },
-        timeOfDay: tod,
-      };
-    }
-  }
 }

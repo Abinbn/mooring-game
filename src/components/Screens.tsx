@@ -334,42 +334,41 @@ export function StartScreen({
                       )}
                     </span>
                     <span>
-                      <b className="text-cyan-200">Stern tug</b> pushes or pulls the stern sideways.
+                      <b className="text-cyan-200">Stern tug / Rudder</b>: swings stern sideways. Ship can also steer solo with rudder + engine wash!
                     </span>
                   </li>
-                  {!touch && (
-                    <li className="flex items-center gap-3">
-                      <span className="flex gap-1">
-                        <Key>←</Key>
-                        <Key>→</Key>
-                      </span>
-                      <span>Both tugs together — slide her sideways.</span>
-                    </li>
-                  )}
+                  <li className="flex items-center gap-3 border-t border-cyan-300/15 pt-2.5">
+                    <span className="flex gap-1">
+                      {touch ? <span className="kbd text-cyan-200">⚓</span> : <Key>T</Key>}
+                    </span>
+                    <span>
+                      <b className="text-cyan-200">Attach / Detach Tugs [T]</b>: summon tugs in pilot station, or cast them off for narrow gates & solo handling.
+                    </span>
+                  </li>
+                  <li className="flex items-center gap-3">
+                    <span className="flex gap-1">
+                      {touch ? <span className="kbd text-amber-200">📯</span> : <Key>H</Key>}
+                    </span>
+                    <span>
+                      <b className="text-amber-200">Ship foghorn</b>: blast for maritime acoustic salute & atmospheric echo!
+                    </span>
+                  </li>
                   <li className="flex items-center gap-3 border-t border-cyan-300/15 pt-2.5">
                     <span className="kbd text-cyan-300">◎</span>
                     <span>
-                      Park inside the <b className="text-cyan-200">dashed outline</b>, square to the quay, nearly stopped. Hold it to secure the lines.
+                      Park inside the <b className="text-cyan-200">dashed outline</b>, square to the quay, nearly stopped. Hold position to secure braided mooring lines.
+                    </span>
+                  </li>
+                  <li className="flex items-center gap-3">
+                    <span className="kbd text-emerald-300">⚓</span>
+                    <span>
+                      <b className="text-emerald-200">Pilot Boundary</b>: Harbour tugs cannot leave pilot limits (-5 pts/tick). Dragging tugs to open sea fails contract!
                     </span>
                   </li>
                   <li className="flex items-center gap-3">
                     <span className="kbd text-red-300">✶</span>
                     <span>
                       Hard knocks cost <b className="text-red-300">hull</b>. Soft touches, fast times and perfect alignment score big.
-                    </span>
-                  </li>
-                  <li className="flex items-center gap-3 border-t border-cyan-300/15 pt-2.5">
-                    <span className="flex gap-1">
-                      {touch ? <span className="kbd text-amber-200">📯</span> : <Key>H</Key>}
-                    </span>
-                    <span>
-                      <b className="text-amber-200">Ship horn</b> signals harbour traffic and summons standby tugboats.
-                    </span>
-                  </li>
-                  <li className="flex items-center gap-3">
-                    <span className="kbd text-emerald-300">⬅</span>
-                    <span>
-                      <b className="text-emerald-200">Outbound Departure</b>: Unmoor alongside with tugs and steer out the channel to open sea.
                     </span>
                   </li>
                 </ul>
@@ -610,19 +609,34 @@ export function GameOverScreen({
   }, [pendingName]);
 
   const wrecked = info.reason === "wrecked";
+  const tugViolation = info.reason === "tug_open_sea";
   return (
     <Overlay>
       <div className="flex w-full flex-1 flex-col items-center justify-center px-4 py-2">
         <div className="panel anim-pop w-full max-w-md rounded-3xl p-5 sm:p-6">
           <div className="text-center">
-            <div className={cn("text-[11px] font-bold uppercase tracking-[0.4em]", wrecked ? "text-red-300" : "text-amber-300")}>
-              {wrecked ? "Hull breached" : "Contract expired"}
+            <div
+              className={cn(
+                "text-[11px] font-bold uppercase tracking-[0.4em]",
+                wrecked || tugViolation ? "text-red-300" : "text-amber-300",
+              )}
+            >
+              {wrecked ? "Hull breached" : tugViolation ? "Pilot Area Violation" : "Contract expired"}
             </div>
-            <h2 className={cn("anim-slam text-4xl font-black uppercase leading-none sm:text-5xl", wrecked ? "text-red-300" : "text-amber-300")}>
-              {wrecked ? "She's going down" : "Out of time"}
+            <h2
+              className={cn(
+                "anim-slam text-4xl font-black uppercase leading-none sm:text-5xl",
+                wrecked || tugViolation ? "text-red-300" : "text-amber-300",
+              )}
+            >
+              {wrecked ? "She's going down" : tugViolation ? "Tugs in Open Sea" : "Out of time"}
             </h2>
             <div className="mt-1 text-xs text-cyan-100/70">
-              {wrecked ? "Too many hard knocks. The insurers would like a word." : "The pilot boat went home without you."}
+              {wrecked
+                ? "Too many hard knocks. The insurers would like a word."
+                : tugViolation
+                ? "Harbour tugs are restricted to harbour pilotage! Dragging attached tugs to open sea revoked your licence."
+                : "The pilot boat went home without you."}
             </div>
           </div>
 
