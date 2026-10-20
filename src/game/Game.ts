@@ -830,12 +830,15 @@ export class Game {
       this.throttleTarget = this.input.ahead ? 1 : this.input.astern ? -1 : 0;
       const helmLeft = this.input.bowLeft || this.input.sternLeft;
       const helmRight = this.input.bowRight || this.input.sternRight;
-      this.rudderTarget = helmRight ? 1 : helmLeft ? -1 : 0;
 
       if (this.tugState === "attached") {
+        // When tug is attached, ship's own turn left/right (rudder) is disabled!
+        this.rudderTarget = 0;
         this.tugs[0].cmd = (this.input.bowRight ? 1 : 0) - (this.input.bowLeft ? 1 : 0);
         this.tugs[1].cmd = (this.input.sternRight ? 1 : 0) - (this.input.sternLeft ? 1 : 0);
       } else {
+        // When tugs are detached, ship steers via its own rudder
+        this.rudderTarget = helmRight ? 1 : helmLeft ? -1 : 0;
         this.tugs[0].cmd = 0;
         this.tugs[1].cmd = 0;
       }
@@ -846,7 +849,7 @@ export class Game {
       this.tugs[1].cmd = 0;
     }
     this.throttle = damp(this.throttle, this.throttleTarget, ENGINE_RAMP, dt);
-    this.rudder = damp(this.rudder, this.rudderTarget, 4.0, dt);
+    this.rudder = damp(this.rudder, this.rudderTarget, this.tugState === "attached" ? 8.0 : 4.0, dt);
     for (const t of this.tugs) t.effort = damp(t.effort, t.cmd, TUG_RAMP, dt);
 
     // Forces (mass = 1)
@@ -876,21 +879,22 @@ export class Game {
     const u = rx * fwd.x + ry * fwd.y;
     const v = rx * right.x + ry * right.y;
 
-    // Rudder hydrodynamics: water flow over rudder at stern
-    // v_flow includes forward hull speed through water (u) plus propeller slipstream/wash
-    const propWash = Math.max(0, this.throttle) * 7.5;
-    const vFlow = u + propWash;
-    if (Math.abs(vFlow) > 0.04 || Math.abs(this.rudder) > 0.04) {
-      const sternArm = -SHIP_L * 0.48;
-      const rudderLift = this.rudder * (vFlow * 1.5 + Math.sign(vFlow) * vFlow * vFlow * 0.06);
-      const fRudderRight = -rudderLift;
-      fx += right.x * fRudderRight;
-      fy += right.y * fRudderRight;
-      torque += sternArm * fRudderRight;
+    // Rudder hydrodynamics: water flow over rudder at stern (only active when tugs are detached)
+    if (this.tugState !== "attached") {
+      const propWash = Math.max(0, this.throttle) * 7.5;
+      const vFlow = u + propWash;
+      if (Math.abs(vFlow) > 0.04 || Math.abs(this.rudder) > 0.04) {
+        const sternArm = -SHIP_L * 0.48;
+        const rudderLift = this.rudder * (vFlow * 1.5 + Math.sign(vFlow) * vFlow * vFlow * 0.06);
+        const fRudderRight = -rudderLift;
+        fx += right.x * fRudderRight;
+        fy += right.y * fRudderRight;
+        torque += sternArm * fRudderRight;
 
-      const rDrag = Math.abs(this.rudder) * Math.abs(vFlow) * 0.35;
-      fx -= fwd.x * rDrag;
-      fy -= fwd.y * rDrag;
+        const rDrag = Math.abs(this.rudder) * Math.abs(vFlow) * 0.35;
+        fx -= fwd.x * rDrag;
+        fy -= fwd.y * rDrag;
+      }
     }
 
     const dLong = -(K_LONG * u + C_LONG * u * Math.abs(u));
