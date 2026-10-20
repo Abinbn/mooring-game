@@ -201,7 +201,14 @@ export default function App() {
           onToggleTugs={onToggleTugs}
         />
       )}
-      {showTouch && <TouchControls onInput={onInput} />}
+      {showTouch && hud && (
+        <TouchControls
+          onInput={onInput}
+          onToggleTugs={onToggleTugs}
+          onHorn={onHorn}
+          hud={hud}
+        />
+      )}
 
       {phase === "menu" && (
         <StartScreen

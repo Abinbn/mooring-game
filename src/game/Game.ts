@@ -882,10 +882,11 @@ export class Game {
     // Rudder hydrodynamics: water flow over rudder at stern (only active when tugs are detached)
     if (this.tugState !== "attached") {
       const propWash = Math.max(0, this.throttle) * 7.5;
-      const vFlow = u + propWash;
+      // Cap vFlow to prevent quadratic torque runaway at high ahead speed (barrel-roll fix)
+      const vFlow = Math.min(u + propWash, 12);
       if (Math.abs(vFlow) > 0.04 || Math.abs(this.rudder) > 0.04) {
         const sternArm = -SHIP_L * 0.48;
-        const rudderLift = this.rudder * (vFlow * 1.5 + Math.sign(vFlow) * vFlow * vFlow * 0.06);
+        const rudderLift = this.rudder * (vFlow * 1.5 + Math.sign(vFlow) * vFlow * vFlow * 0.02);
         const fRudderRight = -rudderLift;
         fx += right.x * fRudderRight;
         fy += right.y * fRudderRight;
@@ -1794,22 +1795,39 @@ export class Game {
     }
     const b = this.level.berth;
     const m = SHIP_L * 0.62;
-    let minX = Math.min(this.pos.x - m, QUAY_X - SHIP_W - 70);
-    let maxX = Math.max(this.pos.x + m, QUAY_X + 30);
-    let minY = Math.min(this.pos.y - m, b.y - m);
-    let maxY = Math.max(this.pos.y + m, b.y + m);
+    const quayTargetX = QUAY_X - SHIP_W / 2;
+    const distToBerth = Math.hypot(this.pos.x - quayTargetX, this.pos.y - b.y);
+
+    // Approach factor: 0 when far away (>300), 1 when close to berth (<=50)
+    const isArrival = this.level.missionType !== "departure";
+    const approach = isArrival ? clamp01(1 - (distToBerth - 50) / 250) : 0;
+
+    const berthMinX = QUAY_X - SHIP_W - 25;
+    const berthMaxX = QUAY_X + 30;
+    const berthMinY = b.y - b.halfLen - 15;
+    const berthMaxY = b.y + b.halfLen + 15;
+
+    let minX = Math.min(this.pos.x - m, berthMinX);
+    let maxX = Math.max(this.pos.x + m, berthMaxX);
+    let minY = Math.min(this.pos.y - m, berthMinY);
+    let maxY = Math.max(this.pos.y + m, berthMaxY);
+
+    // Far buoys are excluded as ship approaches berth so camera zooms in close
+    const buoyMaxDist = 340 * (1 - 0.85 * approach);
     for (const bu of this.buoys) {
-      if (Math.hypot(bu.pos.x - this.pos.x, bu.pos.y - this.pos.y) < 340) {
-        minX = Math.min(minX, bu.pos.x - 30);
-        maxX = Math.max(maxX, bu.pos.x + 30);
-        minY = Math.min(minY, bu.pos.y - 30);
-        maxY = Math.max(maxY, bu.pos.y + 30);
+      if (Math.hypot(bu.pos.x - this.pos.x, bu.pos.y - this.pos.y) < buoyMaxDist) {
+        minX = Math.min(minX, bu.pos.x - 25);
+        maxX = Math.max(maxX, bu.pos.x + 25);
+        minY = Math.min(minY, bu.pos.y - 25);
+        maxY = Math.max(maxY, bu.pos.y + 25);
       }
     }
-    const pad = 40;
+
+    const pad = 38 - 18 * approach;
     const bw = maxX - minX + pad * 2;
     const bh = maxY - minY + pad * 2;
-    const zoomMax = Math.min(3.1, (0.5 * Math.min(vw, vh)) / SHIP_L);
+    const capMultiplier = 0.5 + 0.45 * approach;
+    const zoomMax = Math.min(2.8, (capMultiplier * Math.min(vw, vh)) / (SHIP_L * 0.6));
     const zoom = clamp(Math.min(vw / bw, vh / bh), 0.42, Math.max(0.42, zoomMax));
     return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, zoom };
   }

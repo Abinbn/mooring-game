@@ -11,72 +11,39 @@ interface Props {
   onToggleTugs?: () => void;
 }
 
-function Chip({ ok, label }: { ok: boolean; label: string }) {
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] sm:text-xs font-bold tracking-wider transition-colors duration-150",
-        ok ? "bg-emerald-400/25 text-emerald-200 ring-1 ring-emerald-300/60" : "bg-black/35 text-cyan-100/60 ring-1 ring-cyan-200/15",
-      )}
-    >
-      <span className={cn("inline-block h-2 w-2 rounded-full", ok ? "bg-emerald-300 shadow-[0_0_8px_#3ef2a0]" : "bg-cyan-100/30")} />
-      {label}
-    </div>
-  );
-}
-
 export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs }: Props) {
   const low = hud.timeLeft < 10 && !hud.introActive;
   const hullColor = hud.hull > 60 ? "#3ef2a0" : hud.hull > 30 ? "#ffb340" : "#ff5d5d";
   const curMag = Math.hypot(hud.current.x, hud.current.y);
   const curAngle = (Math.atan2(hud.current.y, hud.current.x) * 180) / Math.PI;
-  const speedKn = (hud.speed * 0.55).toFixed(1);
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none font-display" style={{ paddingTop: "env(safe-area-inset-top)" }}>
-      {/* Top bar */}
+
+      {/* ── Top bar ────────────────────────────────────────────── */}
       <div className="absolute left-0 right-0 top-0 flex items-start justify-between gap-2 p-2 sm:p-3">
+
+        {/* Left: Level card */}
         <div className="min-w-0 rounded-xl bg-black/40 px-3 py-1.5 ring-1 ring-cyan-300/20 backdrop-blur-sm">
           <div className="truncate text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-300/80">
-            {hud.missionType === "tutorial" ? "Training Academy" : `Berth ${hud.berthNumber} · Lv ${hud.level}`}
+            {hud.missionType === "tutorial" ? "Training Academy" : `Lv ${hud.level}`}
           </div>
           <div className="truncate text-sm font-extrabold leading-tight text-white sm:text-base">{hud.levelName}</div>
-          <div className="mt-0.5 flex items-center gap-2 text-[10px] font-bold tracking-wider text-amber-200/90 sm:text-xs">
-            <span className="truncate">{hud.telegraph}</span>
-            <span className="text-cyan-100/60">{speedKn} kn</span>
-            {Math.abs(hud.rudder) > 0.08 && (
-              <span className="text-cyan-300 font-extrabold">
-                {hud.rudder < 0 ? `PORT ${Math.round(Math.abs(hud.rudder) * 35)}° ◀` : `STBD ${Math.round(hud.rudder * 35)}° ▶`}
-              </span>
-            )}
-          </div>
-          <div className="mt-1 flex items-center gap-1.5 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider">
-            {hud.tugState === "standby" ? (
-              hud.inRendezvousRange ? (
-                <span className="flex items-center gap-1 text-amber-300 anim-blink">
-                  <span>⚓</span>
-                  <span>Press [T] to Summon Tugs</span>
-                </span>
-              ) : (
-                <span className="flex items-center gap-1 text-cyan-200/50">
-                  <span>⚓</span>
-                  <span>Tugs Standby · [T] in zone / Steer Solo</span>
-                </span>
-              )
+          {/* Tug status — icon only, no prose text */}
+          <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-bold tracking-wider">
+            {hud.tugState === "standby" && hud.inRendezvousRange ? (
+              <span className="text-amber-300 anim-blink">⚓ [T] Summon</span>
             ) : hud.tugState === "approaching" ? (
-              <span className="flex items-center gap-1 text-amber-300">
-                <span className="animate-spin text-[10px]">⚙</span>
-                <span>Tugs Steaming to Ship...</span>
-              </span>
+              <span className="text-amber-200"><span className="inline-block animate-spin text-[10px]">⚙</span> Steaming…</span>
+            ) : hud.tugState === "attached" ? (
+              <span className="text-emerald-300/80">✓ Tugs Fast</span>
             ) : (
-              <span className="flex items-center gap-1 text-emerald-300/80">
-                <span>✓</span>
-                <span>Tugs Made Fast · [T] Cast Off</span>
-              </span>
+              <span className="text-cyan-200/40">Solo steering</span>
             )}
           </div>
         </div>
 
+        {/* Centre: Timer */}
         <div
           className={cn(
             "rounded-xl px-3 py-1.5 text-center ring-1 backdrop-blur-sm",
@@ -89,6 +56,7 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
           </div>
         </div>
 
+        {/* Right: Score + action buttons */}
         <div className="flex flex-col items-end gap-1.5">
           <div className="rounded-xl bg-black/40 px-3 py-1.5 text-right ring-1 ring-cyan-300/20 backdrop-blur-sm">
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-300/80">Score</div>
@@ -96,23 +64,25 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
               {hud.displayScore.toLocaleString()}
             </div>
             {hud.streak > 1 && (
-              <div className="mt-0.5 text-[10px] font-extrabold tracking-wider text-emerald-300">PERFECT STREAK ×{hud.mult.toFixed(1).replace(/\.0$/, "")}</div>
+              <div className="mt-0.5 text-[10px] font-extrabold tracking-wider text-emerald-300">STREAK ×{hud.mult.toFixed(1).replace(/\.0$/, "")}</div>
             )}
           </div>
           <div className="pointer-events-auto flex gap-1.5">
+            {/* Tug toggle */}
             <button
               type="button"
               onClick={onToggleTugs}
               className={cn(
                 "btn-ghost relative flex h-9 w-9 items-center justify-center rounded-lg text-base font-black text-cyan-200 hover:text-cyan-100 cursor-pointer active:scale-95 transition-all",
                 hud.tugState === "attached" && "bg-cyan-500/25 ring-2 ring-cyan-300 shadow-[0_0_10px_rgba(56,225,255,0.4)] text-cyan-100",
-                hud.tugState === "standby" && hud.inRendezvousRange && "ring-2 ring-amber-400 bg-amber-400/20 text-amber-300 anim-blink shadow-[0_0_12px_rgba(255,179,64,0.6)]",
+                hud.tugState === "standby" && hud.inRendezvousRange && "ring-2 ring-amber-400 bg-amber-400/20 text-amber-300 anim-blink",
               )}
               title={hud.tugState === "attached" ? "Detach Tugs [T]" : "Attach Tugs [T]"}
               aria-label="Toggle Tugs"
             >
               <span>⚓</span>
             </button>
+            {/* Horn */}
             <button
               type="button"
               onClick={onHorn}
@@ -122,6 +92,7 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
             >
               <span>📯</span>
             </button>
+            {/* Mute */}
             <button
               type="button"
               onClick={onMute}
@@ -131,6 +102,7 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
               <span className={cn(hud.muted && "opacity-50")}>♪</span>
               {hud.muted && <span className="absolute left-1/2 top-1/2 h-0.5 w-6 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded bg-red-400" />}
             </button>
+            {/* Pause */}
             <button type="button" onClick={onPause} className="btn-ghost flex h-9 w-9 items-center justify-center gap-1 rounded-lg cursor-pointer" aria-label="Pause">
               <span className="block h-4 w-1.5 rounded-sm bg-current" />
               <span className="block h-4 w-1.5 rounded-sm bg-current" />
@@ -139,9 +111,32 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
         </div>
       </div>
 
-      {/* Pilot Academy Tutorial Guided Banner */}
+      {/* ── Hull bar — full width, below top bar ─────────────── */}
+      <div className="absolute left-2 right-2 sm:left-3 sm:right-3" style={{ top: touch ? "84px" : "88px" }}>
+        <div className="mb-0.5 flex items-center justify-between text-[9px] font-bold uppercase tracking-[0.2em] text-cyan-300/70">
+          <span>Hull integrity</span>
+          <div className="flex items-center gap-2">
+            {curMag > 0.3 && (
+              <span className="flex items-center gap-1 text-cyan-200/70">
+                Current
+                <span className="inline-block text-sm leading-none" style={{ transform: `rotate(${curAngle}deg)` }}>➜</span>
+                {(curMag * 0.55).toFixed(1)} kn
+              </span>
+            )}
+            <span style={{ color: hullColor }}>{Math.round(hud.hull)}%</span>
+          </div>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-black/45 ring-1 ring-cyan-300/20">
+          <div
+            className="hull-bar h-full rounded-full transition-all duration-300"
+            style={{ width: `${Math.max(0, hud.hull)}%`, backgroundColor: hullColor, boxShadow: `0 0 10px ${hullColor}` }}
+          />
+        </div>
+      </div>
+
+      {/* ── Tutorial guided banner ────────────────────────────── */}
       {hud.tutorial && (
-        <div className="pointer-events-auto absolute left-1/2 top-18 sm:top-20 z-30 w-[min(94vw,560px)] -translate-x-1/2">
+        <div className="pointer-events-auto absolute left-1/2 top-[106px] sm:top-[112px] z-30 w-[min(94vw,560px)] -translate-x-1/2">
           <div
             className={cn(
               "rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3 ring-1 backdrop-blur-md shadow-2xl transition-all duration-300",
@@ -176,63 +171,70 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
         </div>
       )}
 
-      {/* Hull bar */}
-      <div className="absolute left-2 top-[108px] w-40 sm:left-3 sm:top-[116px] sm:w-52">
-        <div className="mb-1 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-300/80">
-          <span>Hull</span>
-          <span style={{ color: hullColor }}>{Math.round(hud.hull)}%</span>
+      {/* ── Bottom chips — desktop only (hidden on mobile) ─── */}
+      {!touch && (
+        <div
+          className="absolute left-1/2 flex -translate-x-1/2 flex-wrap justify-center items-center gap-1.5 sm:gap-2 px-2 max-w-[96vw]"
+          style={{ bottom: "calc(18px + env(safe-area-inset-bottom))" }}
+        >
+          {hud.tugPenaltyWarning && (
+            <div className="flex items-center gap-1.5 rounded-full bg-red-600/95 px-3 py-1 text-[10px] sm:text-xs font-black tracking-wider text-white ring-2 ring-red-300 shadow-[0_0_16px_rgba(255,93,93,0.8)] anim-blink">
+              <span>⚠️</span>
+              <span>DETACH TUGS [T] — OUTSIDE PILOT ZONE (−5 PTS)</span>
+            </div>
+          )}
+
+          {hud.missionType === "departure" ? (
+            <>
+              <Chip ok={hud.speed > 0.8} label="PROPULSION" />
+              <Chip ok={hud.tugState === "attached"} label={hud.tugState === "attached" ? "TUGS ATTACHED" : "TUGS DETACHED"} />
+              {hud.departureExit && (
+                <div className="flex items-center gap-1.5 rounded-full bg-emerald-400/20 px-3 py-1 text-[10px] sm:text-xs font-black tracking-wider text-emerald-200 ring-1 ring-emerald-300/60">
+                  <span>{hud.departureExit.label}</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <Chip ok={hud.align.pos} label="POSITION" />
+              <Chip ok={hud.align.angle} label="ANGLE" />
+              <Chip ok={hud.align.speed} label="SPEED" />
+              {hud.securing > 0.02 && hud.phase === "playing" && (
+                <div className="ml-1 rounded-full bg-emerald-400/90 px-2.5 py-1 text-[10px] font-black tracking-wider text-emerald-950 sm:text-xs">
+                  SECURING LINES {Math.round(hud.securing * 100)}%
+                </div>
+              )}
+            </>
+          )}
         </div>
-        <div className="h-2.5 overflow-hidden rounded-full bg-black/45 ring-1 ring-cyan-300/20">
-          <div className="hull-bar h-full rounded-full" style={{ width: `${Math.max(0, hud.hull)}%`, backgroundColor: hullColor, boxShadow: `0 0 10px ${hullColor}` }} />
+      )}
+
+      {/* On mobile: only show the important penalty warning + departure exit */}
+      {touch && (
+        <div
+          className="absolute left-1/2 flex -translate-x-1/2 flex-wrap justify-center items-center gap-1.5 px-2 max-w-[96vw]"
+          style={{ bottom: "calc(220px + env(safe-area-inset-bottom))" }}
+        >
+          {hud.tugPenaltyWarning && (
+            <div className="flex items-center gap-1.5 rounded-full bg-red-600/95 px-3 py-1 text-[10px] font-black tracking-wider text-white ring-2 ring-red-300 shadow-[0_0_16px_rgba(255,93,93,0.8)] anim-blink">
+              <span>⚠️</span>
+              <span>TUGS OUTSIDE PILOT ZONE −5 PTS</span>
+            </div>
+          )}
+          {hud.departureExit && (
+            <div className="flex items-center gap-1.5 rounded-full bg-emerald-400/20 px-3 py-1 text-[10px] font-black tracking-wider text-emerald-200 ring-1 ring-emerald-300/60">
+              <span>{hud.departureExit.label}</span>
+            </div>
+          )}
+          {hud.securing > 0.02 && hud.phase === "playing" && hud.missionType !== "departure" && (
+            <div className="rounded-full bg-emerald-400/90 px-2.5 py-1 text-[10px] font-black tracking-wider text-emerald-950">
+              SECURING {Math.round(hud.securing * 100)}%
+            </div>
+          )}
         </div>
-        {curMag > 0.3 && (
-          <div className="mt-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-200/80">
-            <span>Current</span>
-            <span className="inline-block text-base leading-none text-cyan-200" style={{ transform: `rotate(${curAngle}deg)` }}>
-              ➜
-            </span>
-            <span className="text-cyan-100/70">{(curMag * 0.55).toFixed(1)} kn</span>
-          </div>
-        )}
-      </div>
+      )}
 
-      {/* Alignment / Mission / Warning chips */}
-      <div
-        className="absolute left-1/2 flex -translate-x-1/2 flex-wrap justify-center items-center gap-1.5 sm:gap-2 px-2 max-w-[96vw]"
-        style={{ bottom: touch ? "calc(200px + env(safe-area-inset-bottom))" : "calc(18px + env(safe-area-inset-bottom))" }}
-      >
-        {hud.tugPenaltyWarning && (
-          <div className="flex items-center gap-1.5 rounded-full bg-red-600/95 px-3 py-1 text-[10px] sm:text-xs font-black tracking-wider text-white ring-2 ring-red-300 shadow-[0_0_16px_rgba(255,93,93,0.8)] anim-blink">
-            <span>⚠️</span>
-            <span>DETACH TUGS [T] OUTSIDE PILOT ZONE (-5 PTS)</span>
-          </div>
-        )}
-
-        {hud.missionType === "departure" ? (
-          <>
-            <Chip ok={hud.speed > 0.8} label="PROPULSION" />
-            <Chip ok={hud.tugState === "attached"} label={hud.tugState === "attached" ? "TUGS ATTACHED" : "TUGS DETACHED"} />
-            {hud.departureExit && (
-              <div className="flex items-center gap-1.5 rounded-full bg-emerald-400/20 px-3 py-1 text-[10px] sm:text-xs font-black tracking-wider text-emerald-200 ring-1 ring-emerald-300/60">
-                <span>{hud.departureExit.label}</span>
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            <Chip ok={hud.align.pos} label="POSITION" />
-            <Chip ok={hud.align.angle} label="ANGLE" />
-            <Chip ok={hud.align.speed} label="SPEED" />
-            {hud.securing > 0.02 && hud.phase === "playing" && (
-              <div className="ml-1 rounded-full bg-emerald-400/90 px-2.5 py-1 text-[10px] font-black tracking-wider text-emerald-950 sm:text-xs">
-                SECURING LINES {Math.round(hud.securing * 100)}%
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Level intro banner */}
+      {/* ── Level intro banner ────────────────────────────────── */}
       {hud.introActive && !hud.tutorial && (
         <div key={hud.level} className="anim-banner absolute left-1/2 top-[34%] w-[min(92vw,640px)] -translate-x-1/2 text-center">
           <div className="inline-block rounded-2xl bg-black/55 px-5 py-3 ring-1 ring-cyan-300/30 backdrop-blur-md sm:px-8 sm:py-4">
@@ -244,6 +246,20 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function Chip({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] sm:text-xs font-bold tracking-wider transition-colors duration-150",
+        ok ? "bg-emerald-400/25 text-emerald-200 ring-1 ring-emerald-300/60" : "bg-black/35 text-cyan-100/60 ring-1 ring-cyan-200/15",
+      )}
+    >
+      <span className={cn("inline-block h-2 w-2 rounded-full", ok ? "bg-emerald-300 shadow-[0_0_8px_#3ef2a0]" : "bg-cyan-100/30")} />
+      {label}
     </div>
   );
 }

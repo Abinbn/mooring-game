@@ -189,45 +189,52 @@ export function StartScreen({
             <span className="title-gradient block text-5xl font-black uppercase tracking-tight sm:text-7xl md:text-8xl">Dead Slow</span>
             <span className="title-amber block text-5xl font-black uppercase tracking-tight sm:text-7xl md:text-8xl">Ahead</span>
           </h1>
-          <p className="mx-auto mt-3 max-w-md text-sm text-cyan-50/85 sm:text-base">
-            One giant cargo ship. Two little tugs. Bring her alongside the quay — gently.
-          </p>
         </div>
 
-        {/* Buttons Row: "How to ?" to the left of "Play" / "Resume" */}
-        <div className="anim-pop flex flex-col items-center gap-2.5" style={{ animationDelay: "0.1s" }}>
-          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
-            <button
-              type="button"
-              onClick={() => setActiveModal("howto")}
-              className="btn-ghost flex items-center gap-2.5 rounded-2xl border-2 border-cyan-400/40 bg-cyan-950/45 px-6 py-3.5 text-lg font-black uppercase tracking-wider text-cyan-100 shadow-[0_4px_20px_rgba(56,225,255,0.12)] backdrop-blur-md transition-all hover:border-cyan-300 hover:bg-cyan-500/25 hover:text-white active:scale-95 cursor-pointer sm:px-8 sm:py-4 sm:text-2xl"
-            >
-              <span className="flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full bg-cyan-400/20 text-xs sm:text-sm font-black text-cyan-300 ring-1 ring-cyan-300/60">
-                ?
-              </span>
-              <span>How to ?</span>
-            </button>
-
-            {savedRun && onResume ? (
-              <>
+        {/* Buttons */}
+        <div className="anim-pop flex flex-col items-center gap-3 w-full max-w-sm sm:max-w-md" style={{ animationDelay: "0.1s" }}>
+          {savedRun && onResume ? (
+            <>
+              {/* Resume — full width, prominent */}
+              <button
+                type="button"
+                onClick={onResume}
+                className="btn-primary anim-pulse-glow flex w-full items-center justify-center gap-2 rounded-2xl px-8 py-3.5 text-2xl font-black uppercase tracking-widest cursor-pointer sm:py-4 sm:text-3xl"
+              >
+                <span>Resume</span>
+                <span className="text-base sm:text-lg font-bold opacity-85">(Lv {savedRun.levelIndex})</span>
+              </button>
+              {/* How To + New Run side by side */}
+              <div className="flex w-full gap-3">
                 <button
                   type="button"
-                  onClick={onResume}
-                  className="btn-primary anim-pulse-glow flex items-center gap-2 rounded-2xl px-8 py-3.5 text-2xl font-black uppercase tracking-widest cursor-pointer sm:px-12 sm:py-4 sm:text-3xl"
+                  onClick={() => setActiveModal("howto")}
+                  className="btn-ghost flex flex-1 items-center justify-center gap-2 rounded-2xl border-2 border-cyan-400/40 bg-cyan-950/45 px-4 py-3 text-base font-black uppercase tracking-wider text-cyan-100 backdrop-blur-md transition-all hover:border-cyan-300 hover:bg-cyan-500/25 active:scale-95 cursor-pointer"
                 >
-                  <span>Resume</span>
-                  <span className="text-base sm:text-lg font-bold opacity-85">(Lv {savedRun.levelIndex})</span>
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-400/20 text-xs font-black text-cyan-300 ring-1 ring-cyan-300/60">?</span>
+                  <span>How to ?</span>
                 </button>
                 <button
                   type="button"
                   onClick={onPlay}
-                  className="btn-ghost rounded-2xl px-5 py-3.5 text-sm sm:text-base font-black uppercase tracking-wider text-cyan-200 hover:text-white border border-cyan-400/35 bg-cyan-950/30 hover:bg-cyan-500/20 cursor-pointer active:scale-95 transition-all"
+                  className="btn-ghost flex flex-1 items-center justify-center rounded-2xl border border-cyan-400/35 bg-cyan-950/30 px-4 py-3 text-base font-black uppercase tracking-wider text-cyan-200 hover:bg-cyan-500/20 hover:text-white cursor-pointer active:scale-95 transition-all"
                   title="Start fresh from Level 1"
                 >
                   New Run
                 </button>
-              </>
-            ) : (
+              </div>
+            </>
+          ) : (
+            /* No saved run: How To left of Play */
+            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+              <button
+                type="button"
+                onClick={() => setActiveModal("howto")}
+                className="btn-ghost flex items-center gap-2.5 rounded-2xl border-2 border-cyan-400/40 bg-cyan-950/45 px-6 py-3.5 text-lg font-black uppercase tracking-wider text-cyan-100 shadow-[0_4px_20px_rgba(56,225,255,0.12)] backdrop-blur-md transition-all hover:border-cyan-300 hover:bg-cyan-500/25 hover:text-white active:scale-95 cursor-pointer sm:px-8 sm:py-4 sm:text-2xl"
+              >
+                <span className="flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full bg-cyan-400/20 text-xs sm:text-sm font-black text-cyan-300 ring-1 ring-cyan-300/60">?</span>
+                <span>How to ?</span>
+              </button>
               <button
                 type="button"
                 onClick={onPlay}
@@ -235,12 +242,12 @@ export function StartScreen({
               >
                 Play
               </button>
-            )}
-          </div>
+            </div>
+          )}
           <div className="text-xs font-semibold tracking-wide text-cyan-100/60">
             {touch
               ? savedRun
-                ? "Tap Resume to continue or New Run"
+                ? "Tap Resume to continue or New Run to restart"
                 : "Tap Play to start"
               : savedRun
                 ? "Press Enter or Space to resume"
@@ -250,12 +257,9 @@ export function StartScreen({
 
         {/* Leaderboard below the buttons */}
         <div className="panel anim-pop flex w-full max-w-lg flex-col rounded-2xl p-4 sm:p-5" style={{ animationDelay: "0.18s" }}>
-          <div className="mb-3 flex items-center justify-between border-b border-cyan-300/15 pb-2">
-            <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.25em] text-cyan-300 sm:text-sm">
-              <span className="text-amber-300 text-sm">⚓</span>
-              <span>Harbour log · Top pilots</span>
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-200/50">Local Records</span>
+          <div className="mb-3 flex items-center gap-2 border-b border-cyan-300/15 pb-2 text-xs font-extrabold uppercase tracking-[0.25em] text-cyan-300 sm:text-sm">
+            <span className="text-amber-300 text-sm">⚓</span>
+            <span>Harbour log · Top pilots</span>
           </div>
           <HighScoreTable scores={scores} compact />
           <div className="mt-3 border-t border-cyan-300/10 pt-2 text-center text-[11px] text-cyan-100/50">
