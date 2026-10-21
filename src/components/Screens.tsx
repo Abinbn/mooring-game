@@ -42,7 +42,9 @@ export function HighScoreTable({ scores, highlight, compact = false }: { scores:
         >
           <span className={cn("w-6 text-right font-black tabular-nums", i === 0 ? "text-amber-300" : i < 3 ? "text-cyan-200" : "text-cyan-100/50")}>{i + 1}</span>
           <span className="flex-1 truncate font-bold tracking-wide">{s.name}</span>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-200/60">Lv {s.level}</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-200/60">
+            {s.level === 0 ? "Academy" : `Lv ${s.level}`}
+          </span>
           <span className="w-20 text-right font-black tabular-nums text-white">{s.score.toLocaleString()}</span>
         </li>
       ))}
@@ -79,6 +81,12 @@ export function StartScreen({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<StartModal>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  // Keyboard users land inside the dialog instead of tabbing through the page.
+  useEffect(() => {
+    if (activeModal) closeRef.current?.focus();
+  }, [activeModal]);
 
   // Close dropdown or modal with Escape, and prevent Space/Enter from starting game when modal is open
   useEffect(() => {
@@ -108,7 +116,7 @@ export function StartScreen({
               "flex h-10 items-center gap-2 rounded-xl border border-cyan-300/30 bg-black/45 px-3 py-2 text-cyan-100 shadow-lg backdrop-blur-md transition-all hover:border-cyan-300/60 hover:bg-cyan-500/20 active:scale-95 cursor-pointer",
               menuOpen && "border-cyan-300/80 bg-cyan-500/25 shadow-[0_0_18px_rgba(56,225,255,0.35)]",
             )}
-            aria-label="Open menu"
+            aria-label="Open options menu"
             aria-expanded={menuOpen}
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -202,7 +210,9 @@ export function StartScreen({
                 className="btn-primary anim-pulse-glow flex w-full items-center justify-center gap-2 rounded-2xl px-8 py-3.5 text-2xl font-black uppercase tracking-widest cursor-pointer sm:py-4 sm:text-3xl"
               >
                 <span>Resume</span>
-                <span className="text-base sm:text-lg font-bold opacity-85">(Lv {savedRun.levelIndex})</span>
+                <span className="text-base sm:text-lg font-bold opacity-85">
+                  ({savedRun.levelIndex === 0 ? "Academy" : `Lv ${savedRun.levelIndex}`})
+                </span>
               </button>
               {/* How To + New Run side by side */}
               <div className="flex w-full gap-3">
@@ -263,7 +273,7 @@ export function StartScreen({
           </div>
           <HighScoreTable scores={scores} compact />
           <div className="mt-3 border-t border-cyan-300/10 pt-2 text-center text-[11px] text-cyan-100/50">
-            {touch ? "Press ⏸ to pause during game" : "P / Esc pauses · M mutes · R restarts after a run"}
+            {touch ? "Tap the pause button (top right) during a run" : "P / Esc pauses · M mutes · R restarts after a run"}
           </div>
         </div>
       </div>
@@ -275,11 +285,17 @@ export function StartScreen({
           onClick={() => setActiveModal(null)}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={
+              activeModal === "howto" ? "How to berth" : activeModal === "privacy" ? "Privacy policy" : "About Dead Slow Ahead"
+            }
             className="panel anim-pop relative max-h-[90vh] w-full max-w-lg overflow-y-auto no-scrollbar rounded-3xl border border-cyan-300/35 p-5 text-cyan-50 shadow-2xl sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close Button */}
             <button
+              ref={closeRef}
               type="button"
               onClick={() => setActiveModal(null)}
               className="btn-ghost absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-xl text-lg font-bold text-cyan-200 hover:text-white cursor-pointer"
@@ -314,7 +330,7 @@ export function StartScreen({
                   <li className="flex items-center gap-3">
                     <span className="flex gap-1">
                       {touch ? (
-                        <Key wide>◀ ▶</Key>
+                        <Key wide>BOW ◀ ▶</Key>
                       ) : (
                         <>
                           <Key>Q</Key>
@@ -329,7 +345,7 @@ export function StartScreen({
                   <li className="flex items-center gap-3">
                     <span className="flex gap-1">
                       {touch ? (
-                        <Key wide>◀ ▶</Key>
+                        <Key wide>STERN ◀ ▶</Key>
                       ) : (
                         <>
                           <Key>A</Key>
@@ -593,6 +609,7 @@ export function GameOverScreen({
   onSubmitName,
   onRestart,
   onMenu,
+  touch,
 }: {
   info: GameOverInfo;
   scores: ScoreEntry[];
@@ -603,6 +620,7 @@ export function GameOverScreen({
   onSubmitName: () => void;
   onRestart: () => void;
   onMenu: () => void;
+  touch: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -697,7 +715,7 @@ export function GameOverScreen({
 
           <div className="mt-4 flex gap-2">
             <button type="button" onClick={onRestart} className="btn-primary flex-1 rounded-xl px-4 py-3 text-lg font-black uppercase tracking-widest">
-              Restart <span className="text-sm opacity-70">(R)</span>
+              Restart {!touch && <span className="text-sm opacity-70">(R)</span>}
             </button>
             <button type="button" onClick={onMenu} className="btn-ghost rounded-xl px-4 py-3 font-bold uppercase tracking-widest">
               Menu

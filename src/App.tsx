@@ -235,6 +235,7 @@ export default function App() {
           onSubmitName={submitName}
           onRestart={restart}
           onMenu={toMenu}
+          touch={touch}
         />
       )}
     </div>

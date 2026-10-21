@@ -74,8 +74,10 @@ canvas {
     0 14px 30px rgba(255, 159, 26, 0.35);
   transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
 }
-.btn-primary:hover {
-  filter: brightness(1.06);
+@media (hover: hover) {
+  .btn-primary:hover {
+    filter: brightness(1.06);
+  }
 }
 .btn-primary:active {
   transform: translateY(5px);
@@ -93,8 +95,21 @@ canvas {
 .btn-ghost:hover {
   background: rgba(56, 225, 255, 0.18);
 }
+@media (hover: none) {
+  /* don't leave a "hovered" look behind after a tap */
+  .btn-ghost:hover {
+    background: rgba(56, 225, 255, 0.08);
+  }
+}
 .btn-ghost:active {
   transform: translateY(2px);
+}
+
+.btn-primary:focus-visible,
+.btn-ghost:focus-visible,
+.kbd:focus-visible {
+  outline: 2px solid #c6f6ff;
+  outline-offset: 2px;
 }
 
 .kbd {
@@ -141,6 +156,19 @@ canvas {
 .tbtn.engine.pressed {
   background: rgba(255, 179, 64, 0.75);
   border-color: #ffe1ad;
+}
+
+/* Touch HUD chips sit just above the touch pad (pad = 208px tall + 12px inset) */
+.touch-chips {
+  bottom: calc(232px + env(safe-area-inset-bottom));
+}
+/* Short/landscape viewports: the pad eats most of the height, so dock the
+   chips under the top HUD instead of into the controls. */
+@media (max-height: 560px) {
+  .touch-chips {
+    bottom: auto;
+    top: calc(env(safe-area-inset-top) + 148px);
+  }
 }
 
 /* Animations */
@@ -215,3 +243,13 @@ canvas {
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
+
+/* Respect reduced-motion preferences for the decorative loops */
+@media (prefers-reduced-motion: reduce) {
+  .anim-pulse-glow,
+  .anim-blink,
+  .anim-float,
+  .anim-banner {
+    animation: none;
+  }
+}
