@@ -1,5 +1,10 @@
 # HUD / UI audit & fix plan
 
+> **Superseded for the shell.** This document covers the first repair pass (structure,
+> input bugs, a11y). A second pass replaced the visual language itself — tokens, type,
+> icons, HUD layout and all screens — and fixed the engine-side issues found while doing
+> it. See "Second pass" at the bottom.
+
 _Audit of the React HUD (`src/components/Hud.tsx`), the overlays (`src/components/Screens.tsx`),
 the touch pad (`src/components/TouchControls.tsx`) and their wiring in `src/App.tsx`._
 
@@ -52,3 +57,50 @@ Everything below is **fixed** in this branch; the fix is described next to each 
   most of the play area. A dedicated compact/landscape pad would help.
 - `index.html` disables pinch zoom (`user-scalable=no`) — intentional for a game, but it hurts a11y.
 - Dialogs move focus in and restore Escape handling, but there is still no full focus trap.
+
+
+---
+
+## Second pass — production hardening & design language
+
+### Engine
+| Issue | Fix |
+| --- | --- |
+| The pilot-area rule was cosmetic: penalties ticked forever, the fatal line was somewhere else (the exit threshold). | Tugs outside the pilot limit fine you, then revoke the contract after a 3 s grace period; the HUD shows a live countdown. The academy is exempt. |
+| The pilot boundary was drawn as a single line, so the north/south limits were invisible. | Full dashed boundary rectangle with the seaward limit line labelled. |
+| `isInRendezvousRange()` used an infinite vertical band, so tugs could be summoned far outside the drawn pilot station. | Trigger is the drawn circle. |
+| SAT could resolve a deep quay contact the wrong way and eject the hull onto land. | Hard hull-vs-quay clamp plus basin limits after every collision pass. |
+| The camera framed the ship inside a hardcoded `top: 64 / bottom: 196` box. | Insets are measured from the real HUD/pad DOM every 0.4 s (and on phase change), so framing is correct on any aspect ratio. |
+| The first rendered frame used a 1×1 viewport: the camera started fully zoomed out and drifted in for seconds. | Resize before the first level load and snap the camera to its target. |
+| Score screens auto-advanced after 3.4 s — barely enough to read five rows. | 6 s, one exported constant shared with the progress bar, plus an explicit continue button. |
+| AudioContext was never closed; deferred horn/tug sounds fired after unmount. | `AudioSys.dispose()`, tracked timers cleared on destroy. |
+| Reduced-motion was CSS-only. | Canvas shake, flash and hit-stop are disabled too. |
+
+### Design language
+The interface was rebuilt around a restrained maritime instrument style:
+
+- **Type:** system UI stack (Inter/SF/Segoe), tabular numerals, 10–13 px labels,
+  weights 500–700. Gradient headings, `tracking-widest` everywhere and 900-weight
+  display type are gone.
+- **Icons:** 16 inline SVG glyphs replace every emoji — including the ones drawn
+  into the canvas, which rendered as tofu on systems without an emoji font.
+- **Colour:** four ink surfaces, paper text, one amber signal with semantic
+  safe/danger/teal. Neon cyan rings, glow shadows, purple accents and pulsing
+  CTAs removed.
+- **Surfaces:** flat translucent bars, 1 px hairlines, one shadow level, no
+  backdrop blur on the play field (expensive on mobile GPUs).
+- **Layout:** one instrument strip instead of three floating glass cards; the
+  hull line is part of it. The touch pad gains a landscape variant.
+- **Copy:** "juicy", "★ New harbour record ★" and emoji punctuation replaced with
+  plain, specific language ("New harbour record", "Take the helm").
+
+### Verification
+- `npm run typecheck` — clean.
+- `npm run selfcheck` — 268 invariants: SAT/circle collision behaviour, level
+  determinism, spawn/berth clearance for 40 levels × 4 seeds, quay clamp.
+- Headless run of the real `Game` class against a mock canvas: menu, academy,
+  pause/resume, horn, tug attach/detach and four level types — no exceptions.
+- SSR render of every screen in desktop and touch states: no emoji, no legacy
+  gradient/glow classes.
+- `npm run build` — single 368 kB `dist/index.html` (111 kB gzipped), no external
+  requests at runtime.

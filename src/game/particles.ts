@@ -26,7 +26,7 @@ export interface Particle {
   grow: number;
 }
 
-const CONFETTI = ["#ff5d5d", "#ffb340", "#3ef2a0", "#38e1ff", "#ffffff", "#c77dff", "#ffe66d"];
+const CONFETTI = ["#d9564a", "#f0a63c", "#57b98a", "#6fb9c9", "#ffffff", "#8f9ec4", "#cbb98a"];
 
 export class ParticleSystem {
   list: Particle[] = [];
