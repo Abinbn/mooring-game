@@ -82,26 +82,28 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
                 )}
               </div>
               <div className="flex shrink-0 gap-1">
-                {/* Tug + horn live in the touch pad; hide them on narrow screens. */}
-                <div className="hidden gap-1 sm:flex">
-                  <button
-                    type="button"
-                    onClick={onToggleTugs}
-                    className={cn(
-                      BTN,
-                      tugsAttached && "border-safe/70 bg-safe/20 text-safe",
-                      hud.tugState === "standby" && hud.inRendezvousRange && "border-signal/80 bg-signal/15 text-signal",
-                    )}
-                    title={tugsAttached ? "Cast off tugs (T)" : "Attach tugs (T)"}
-                    aria-label="Tugs"
-                    aria-pressed={tugsAttached}
-                  >
-                    <Icon name="anchor" className="h-4 w-4" />
-                  </button>
-                  <button type="button" onClick={onHorn} className={BTN} title="Ship horn (H)" aria-label="Ship horn">
-                    <Icon name="horn" className="h-4 w-4" />
-                  </button>
-                </div>
+                {/* Tug + horn live in the touch pad on touch devices. */}
+                {!touch && (
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={onToggleTugs}
+                      className={cn(
+                        BTN,
+                        tugsAttached && "border-safe/70 bg-safe/20 text-safe",
+                        hud.tugState === "standby" && hud.inRendezvousRange && "border-signal/80 bg-signal/15 text-signal",
+                      )}
+                      title={tugsAttached ? "Cast off tugs (T)" : "Attach tugs (T)"}
+                      aria-label="Tugs"
+                      aria-pressed={tugsAttached}
+                    >
+                      <Icon name="anchor" className="h-4 w-4" />
+                    </button>
+                    <button type="button" onClick={onHorn} className={BTN} title="Ship horn (H)" aria-label="Ship horn">
+                      <Icon name="horn" className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={onMute}

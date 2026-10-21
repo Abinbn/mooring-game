@@ -1140,6 +1140,17 @@ export class Game {
     }
 
     const slide = Math.abs(vt);
+    // Water lapping against the hull where she rests on the quay wall.
+    if (kind === "quay" && this.phase === "playing" && Math.abs(vn) < 1.8 && Math.random() < 0.1) {
+      this.particles.foam(
+        c.point.x - 1.5,
+        c.point.y + (Math.random() - 0.5) * 6,
+        (Math.random() - 0.5) * 5,
+        (Math.random() - 0.5) * 5,
+        1.2 + Math.random() * 1.4,
+        0.6,
+      );
+    }
     if (slide > 2.5 && this.phase === "playing" && !this.wrecked) {
       if (Math.random() < 0.5) {
         this.particles.burst(c.point.x, c.point.y, "spark", 1, 30 + slide * 4, n.x, n.y);
