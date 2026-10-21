@@ -90,6 +90,8 @@ export function StartScreen({
   touch,
   muted,
   onMute,
+  callsign,
+  onCallsignChange,
 }: {
   onPlay: () => void;
   onResume?: () => void;
@@ -99,9 +101,13 @@ export function StartScreen({
   touch: boolean;
   muted: boolean;
   onMute: () => void;
+  callsign?: string;
+  onCallsignChange?: (v: string) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<StartModal>(null);
+  const [editingCallsign, setEditingCallsign] = useState(false);
+  const [draftCallsign, setDraftCallsign] = useState(callsign ?? "");
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -160,6 +166,54 @@ export function StartScreen({
                   </span>
                   <span className={cn("label", muted ? "text-danger" : "text-safe")}>{muted ? "Off" : "On"}</span>
                 </button>
+                {onCallsignChange && (
+                  <div className="rounded px-2.5 py-2">
+                    <div className="flex w-full items-center justify-between text-[12px] font-medium text-paper">
+                      <span className="flex items-center gap-2">
+                        <Icon name="star" className="h-4 w-4" />
+                        Callsign
+                      </span>
+                      {!editingCallsign && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDraftCallsign(callsign ?? "");
+                            setEditingCallsign(true);
+                          }}
+                          className="rounded border border-paper/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-paper-dim hover:bg-paper/10 cursor-pointer"
+                        >
+                          {callsign ? callsign : "Set"}
+                        </button>
+                      )}
+                    </div>
+                    {editingCallsign && (
+                      <form
+                        className="mt-1.5 flex gap-1"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          onCallsignChange(draftCallsign);
+                          setEditingCallsign(false);
+                        }}
+                      >
+                        <input
+                          value={draftCallsign}
+                          onChange={(e) => setDraftCallsign(e.target.value.toUpperCase().slice(0, 12))}
+                          maxLength={12}
+                          aria-label="Callsign"
+                          placeholder="CALLSIGN"
+                          autoFocus
+                          className="min-w-0 flex-1 rounded border border-paper/20 bg-ink-900/70 px-2 py-1 text-[12px] font-semibold uppercase tracking-[0.06em] text-paper outline-none placeholder:text-paper-mute"
+                        />
+                        <button type="submit" className="btn-primary rounded px-2 text-[11px] font-bold uppercase cursor-pointer">
+                          Save
+                        </button>
+                      </form>
+                    )}
+                    <p className="mt-1 text-[10px] leading-snug text-paper-mute">
+                      Runs on this device are logged under this name.
+                    </p>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -196,9 +250,6 @@ export function StartScreen({
             Dead Slow
             <span className="block text-signal">Ahead</span>
           </h1>
-          <p className="mt-2 text-[12px] text-paper-dim sm:text-[13px]">
-            Bring a 200-metre cargo ship alongside with two tugs. No rush — that is the point.
-          </p>
         </div>
 
         {/* Actions */}
@@ -239,7 +290,7 @@ export function StartScreen({
                 className="btn-primary flex items-center justify-center gap-2 rounded-md px-6 py-3 text-base font-bold uppercase tracking-[0.06em] cursor-pointer"
               >
                 <Icon name="play" className="h-4 w-4" />
-                Take the helm
+                Play
               </button>
               <button
                 type="button"
@@ -251,13 +302,7 @@ export function StartScreen({
             </>
           )}
           <p className="mt-1 text-center text-[11px] text-paper-mute">
-            {touch
-              ? savedRun
-                ? "Resume your contract, or start again from the first berth"
-                : "Tap to start"
-              : savedRun
-                ? "Enter to resume · Esc for options"
-                : "Enter or Space to start"}
+            {savedRun ? "Pick up where you left off, or start again from the first berth." : "Press a button to begin."}
           </p>
         </div>
 
@@ -434,7 +479,7 @@ export function PauseScreen({
               Restart run
             </button>
             <button type="button" onClick={onMenu} className="btn-ghost rounded-md px-5 py-2.5 text-[12px] font-semibold uppercase tracking-[0.06em] cursor-pointer">
-              Harbour office
+              Main menu
             </button>
           </div>
           {!touch && (
@@ -554,10 +599,12 @@ export function GameOverScreen({
   onRestart,
   onMenu,
   touch,
+  pilot,
 }: {
   info: GameOverInfo;
   scores: ScoreEntry[];
   highlight: number;
+  pilot?: string;
   pendingName: boolean;
   name: string;
   onNameChange: (v: string) => void;
@@ -641,8 +688,16 @@ export function GameOverScreen({
               </div>
             </form>
           ) : (
-            <div className="mt-3 max-h-40 overflow-y-auto no-scrollbar">
-              <HighScoreTable scores={scores} highlight={highlight} />
+            <div className="mt-3">
+              {pilot && (
+                <div className="mb-1.5 flex items-baseline justify-between">
+                  <span className="label text-paper-mute">Logged as</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-paper">{pilot}</span>
+                </div>
+              )}
+              <div className="max-h-40 overflow-y-auto no-scrollbar">
+                <HighScoreTable scores={scores} highlight={highlight} />
+              </div>
             </div>
           )}
 
@@ -651,7 +706,7 @@ export function GameOverScreen({
               Restart{!touch && <span className="ml-1 font-medium opacity-60">R</span>}
             </button>
             <button type="button" onClick={onMenu} className="btn-ghost rounded-md px-4 py-2.5 text-[12px] font-semibold uppercase tracking-[0.06em] cursor-pointer">
-              Harbour office
+              Main menu
             </button>
           </div>
         </div>

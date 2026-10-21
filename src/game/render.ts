@@ -112,10 +112,14 @@ export function drawWater(
 
   const p1 = wavePattern(ctx, 11, 0.1);
   const p2 = wavePattern(ctx, 23, 0.06);
-  const ox1 = (time * (6 + current.x * 1.2)) % 160;
-  const oy1 = (time * (3 + current.y * 1.2)) % 160;
-  const ox2 = (time * (-4 + current.x * 1.2)) % 160;
-  const oy2 = (time * (5 + current.y * 1.2)) % 160;
+  // Slow, steady drift on two layers. The sea must never scroll backwards:
+  // a surface that reverses direction reads as the world lurching and makes
+  // people seasick, which is the last thing a berthing game needs.
+  const drift = Math.min(1.4, Math.hypot(current.x, current.y) * 0.12);
+  const ox1 = (time * (3.4 + drift)) % 160;
+  const oy1 = (time * (1.3 + drift * 0.4)) % 160;
+  const ox2 = (time * (2.1 + drift * 0.7)) % 160;
+  const oy2 = (time * (0.9 + drift * 0.3)) % 160;
   if (p1) {
     ctx.save();
     ctx.translate(ox1, oy1);
@@ -157,7 +161,7 @@ export function drawCurrentLines(ctx: CanvasRenderingContext2D, view: WorldView,
   for (let x = x0; x < view.right + spacing; x += spacing) {
     for (let y = y0; y < view.bottom + spacing; y += spacing) {
       const phase = ((x * 7 + y * 13) % 97) / 97;
-      const t = (time * mag * 0.9 + phase * spacing) % spacing;
+      const t = (time * mag * 0.55 + phase * spacing) % spacing;
       const px = x + nx * t + ((y / spacing) % 2) * 40;
       const py = y + ny * t;
       if (px > QUAY_X - 12) continue;
@@ -187,7 +191,7 @@ export function drawRocks(ctx: CanvasRenderingContext2D, rocks: Obstacle[], time
     // foam line
     ctx.save();
     ctx.setLineDash([14, 18]);
-    ctx.lineDashOffset = -time * 18;
+    ctx.lineDashOffset = -time * 4;
     ctx.strokeStyle = "rgba(255,255,255,0.35)";
     ctx.lineWidth = 3;
     ctx.stroke();
@@ -681,7 +685,7 @@ export function drawGhost(ctx: CanvasRenderingContext2D, poly: Vec[], color: str
   ctx.fill();
   ctx.globalAlpha = alpha;
   ctx.setLineDash([7, 5]);
-  ctx.lineDashOffset = -time * 14;
+  ctx.lineDashOffset = -time * 5;
   ctx.strokeStyle = color;
   ctx.lineWidth = 1.8;
   ctx.stroke();
@@ -700,11 +704,11 @@ export function drawBerthZone(ctx: CanvasRenderingContext2D, berth: Berth, color
   ctx.fillRect(x0, y0, QUAY_X - x0, h);
   // Chevrons pointing at the quay
   ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.35 + Math.sin(time * 3) * 0.1;
+  ctx.globalAlpha = 0.32 + Math.sin(time * 2) * 0.06;
   ctx.lineWidth = 1.6;
   ctx.beginPath();
   for (let i = 0; i < 3; i++) {
-    const x = QUAY_X - 46 + i * 11 + ((time * 10) % 11);
+    const x = QUAY_X - 46 + i * 11 + ((time * 4) % 11);
     const cy = berth.y;
     ctx.moveTo(x - 4, cy - 6);
     ctx.lineTo(x, cy);
@@ -774,7 +778,7 @@ export function drawRendezvousZone(
   inRange: boolean,
 ) {
   ctx.save();
-  const pulse = (time * 0.7) % 1;
+  const pulse = (time * 0.45) % 1;
   ctx.strokeStyle = inRange ? "rgba(240, 166, 60, 0.5)" : "rgba(111, 185, 201, 0.35)";
   ctx.lineWidth = 2;
   ctx.setLineDash([8, 8]);
@@ -866,7 +870,7 @@ export function drawDepartureFairway(
     ctx.lineTo(threshold, Math.min(view.bottom, 800));
     ctx.stroke();
 
-    const offset = (time * 18) % 30;
+    const offset = (time * 6) % 30;
     ctx.font = "600 12px Inter, Segoe UI, system-ui, sans-serif";
     ctx.fillStyle = "rgba(87, 185, 138, 0.95)";
     ctx.textAlign = "center";
@@ -882,7 +886,7 @@ export function drawDepartureFairway(
     ctx.lineTo(Math.min(view.right, -100), threshold);
     ctx.stroke();
 
-    const offset = (time * 18) % 30;
+    const offset = (time * 6) % 30;
     ctx.font = "600 12px Inter, Segoe UI, system-ui, sans-serif";
     ctx.fillStyle = "rgba(87, 185, 138, 0.95)";
     ctx.textAlign = "center";
@@ -897,7 +901,7 @@ export function drawDepartureFairway(
     ctx.lineTo(Math.min(view.right, -100), threshold);
     ctx.stroke();
 
-    const offset = (time * 18) % 30;
+    const offset = (time * 6) % 30;
     ctx.font = "600 12px Inter, Segoe UI, system-ui, sans-serif";
     ctx.fillStyle = "rgba(87, 185, 138, 0.95)";
     ctx.textAlign = "center";

@@ -20,6 +20,8 @@ export default function App() {
   const [highlight, setHighlight] = useState(-1);
   const [pendingName, setPendingName] = useState(false);
   const [name, setName] = useState("");
+  const [callsign, setCallsign] = useState(() => (typeof window !== "undefined" ? getLastName() : ""));
+  const [loggedAs, setLoggedAs] = useState("");
   const [muted, setMuted] = useState(false);
   const [touch, setTouch] = useState(() => (typeof window !== "undefined" ? window.matchMedia("(pointer: coarse)").matches : false));
   const [fatal, setFatal] = useState<string | null>(null);
@@ -34,26 +36,35 @@ export default function App() {
   nameRef.current = name;
   gameOverRef.current = gameOver;
 
+  /** Write a finished run to the harbour log under a pilot name. */
+  const logRun = useCallback((info: GameOverInfo, rawName: string) => {
+    const pilot = (rawName.trim() || "CAPTAIN").toUpperCase().slice(0, 12);
+    setLastName(pilot);
+    setCallsign(pilot);
+    const rank = addScore({ name: pilot, score: info.score, level: info.level, date: Date.now() });
+    setHighlight(rank);
+    setScores(loadScores());
+    setLoggedAs(rank >= 0 ? pilot : "");
+    setPendingName(false);
+    pendingRef.current = false;
+  }, []);
+
   const submitName = useCallback(() => {
     const info = gameOverRef.current;
     if (!pendingRef.current || !info) return;
-    const n = (nameRef.current.trim() || "CAPTAIN").toUpperCase();
-    setLastName(n);
-    const rank = addScore({ name: n, score: info.score, level: info.level, date: Date.now() });
-    setHighlight(rank);
-    setScores(loadScores());
-    setPendingName(false);
-    pendingRef.current = false;
+    logRun(info, nameRef.current);
     gameRef.current?.audio.click();
-  }, []);
+  }, [logRun]);
 
   const restart = useCallback(() => {
     if (pendingRef.current) submitName();
+    setLoggedAs("");
     gameRef.current?.restart();
   }, [submitName]);
 
   const toMenu = useCallback(() => {
     if (pendingRef.current) submitName();
+    setLoggedAs("");
     gameRef.current?.toMenu();
   }, [submitName]);
 
@@ -72,11 +83,20 @@ export default function App() {
           if (p === "gameover" && payload) {
             const info = payload as GameOverInfo;
             setGameOver(info);
+            setLoggedAs("");
             const q = qualifies(info.score);
-            setPendingName(q);
-            pendingRef.current = q;
-            setHighlight(-1);
-            if (q) setName(getLastName() || "");
+            const knownPilot = getLastName();
+            if (q && knownPilot) {
+              // This device already has a pilot: the run belongs to them, so it
+              // is logged directly instead of stacking up duplicate entries.
+              setHighlight(-1);
+              logRun(info, knownPilot);
+            } else {
+              setPendingName(q);
+              pendingRef.current = q;
+              setHighlight(-1);
+              setName("");
+            }
             setScores(loadScores());
             setSavedRun(null);
           }
@@ -169,16 +189,22 @@ export default function App() {
       const g = gameRef.current;
       if (!g) return;
       const p = phaseRef.current;
+      if (e.code === "KeyM") {
+        setMuted(g.toggleMute());
+        return;
+      }
+      // A run only ever starts from an explicit button press, so a stray
+      // keypress can never drop the player straight into the harbour.
+      if (p === "menu") return;
+
+      if (e.code === "Escape") {
+        if (p === "playing") g.pause();
+        else if (p === "paused") g.resume();
+        else if (p === "gameover") toMenu();
+        return;
+      }
       if (e.code === "Enter" || e.code === "Space") {
-        if (p === "menu") {
-          e.preventDefault();
-          const s = loadSavedRun();
-          if (s) {
-            onResumeRun();
-          } else {
-            onPlay();
-          }
-        } else if (p === "levelClear") {
+        if (p === "levelClear") {
           e.preventDefault();
           g.skipLevelClear();
         } else if (p === "gameover") {
@@ -187,22 +213,26 @@ export default function App() {
         }
       } else if (e.code === "KeyR") {
         if (p === "gameover" || p === "paused") restart();
-      } else if (e.code === "Escape") {
-        if (p === "gameover") toMenu();
-      } else if (e.code === "KeyM") {
-        setMuted(g.toggleMute());
+      } else if (e.code === "KeyP") {
+        if (p === "playing") g.pause();
+        else if (p === "paused") g.resume();
       } else if (p === "levelClear" && !e.repeat) {
         g.skipLevelClear();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [restart, toMenu, onResumeRun, onPlay]);
+  }, [restart, toMenu]);
 
   const onInput = useCallback((a: Action, d: boolean) => gameRef.current?.setInput(a, d), []);
   const onMute = useCallback(() => {
     const g = gameRef.current;
     if (g) setMuted(g.toggleMute());
+  }, []);
+  const onCallsignChange = useCallback((v: string) => {
+    const clean = v.toUpperCase().slice(0, 12);
+    setCallsign(clean);
+    setLastName(clean);
   }, []);
   const onPause = useCallback(() => gameRef.current?.pause(), []);
   const onResume = useCallback(() => gameRef.current?.resume(), []);
@@ -256,6 +286,8 @@ export default function App() {
           touch={touch}
           muted={muted}
           onMute={onMute}
+          callsign={callsign}
+          onCallsignChange={onCallsignChange}
         />
       )}
       {phase === "paused" && <PauseScreen onResume={onResume} onRestart={restart} onMenu={toMenu} touch={touch} />}
@@ -266,6 +298,7 @@ export default function App() {
           scores={scores}
           highlight={highlight}
           pendingName={pendingName}
+          pilot={loggedAs || undefined}
           name={name}
           onNameChange={setName}
           onSubmitName={submitName}

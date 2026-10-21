@@ -31,10 +31,22 @@ export function qualifies(score: number): boolean {
   return score > list[list.length - 1].score;
 }
 
-/** Adds the entry and returns its rank (0-based) or -1 if it didn't make the table. */
+/**
+ * Records a finished run against a pilot and returns their rank (0-based), or
+ * -1 if it did not make the table.
+ *
+ * One pilot, one row: the harbour log keeps each callsign's best run, so
+ * playing again on the same device refines that entry instead of stacking up
+ * duplicates for the same person.
+ */
 export function addScore(entry: ScoreEntry): number {
   const list = loadScores();
-  list.push(entry);
+  const existing = list.findIndex((e) => e.name === entry.name);
+  if (existing >= 0) {
+    if (entry.score > list[existing].score) list[existing] = { ...entry };
+  } else {
+    list.push(entry);
+  }
   list.sort((a, b) => b.score - a.score);
   const trimmed = list.slice(0, MAX_SCORES);
   try {
@@ -42,7 +54,7 @@ export function addScore(entry: ScoreEntry): number {
   } catch {
     /* ignore */
   }
-  return trimmed.indexOf(entry);
+  return trimmed.findIndex((e) => e.name === entry.name);
 }
 
 export function getLastName(): string {

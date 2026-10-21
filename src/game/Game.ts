@@ -27,9 +27,16 @@ import {
   SECURE_TIME,
   SHIP_L,
   SHIP_W,
+  MAX_ANGVEL,
+  RUDDER_DRAG,
+  RUDDER_LIFT,
+  TUG_ACCEL,
   TUG_ANCHOR,
   TUG_BREACH_GRACE,
+  TUG_COLLIDE_R,
   TUG_FORCE,
+  TUG_MAX_SPEED,
+  TUG_TORQUE_SCALE,
   TUG_L,
   TUG_RAMP,
   TUG_W,
@@ -87,6 +94,8 @@ export type TugAttachmentState = "standby" | "approaching" | "attached";
 export const LEVEL_CLEAR_HOLD = 6;
 /** Level time limits above this mean "no clock". */
 const UNLIMITED_TIME = 9000;
+/** Safety valve: the run is attached even if the tugs cannot reach the hull. */
+const TUG_APPROACH_TIMEOUT = 24;
 
 export interface TutorialInfo {
   step: number;
@@ -163,6 +172,10 @@ export interface GameCallbacks {
 
 interface Tug {
   anchorX: number;
+  vel: Vec;
+  /** Where the tug has been shoved to, in world space, to stay clear of the hull. */
+  avoid: Vec;
+  bumpCd: number;
   side: 1 | -1;
   pendingSide: 1 | -1;
   cmd: number;
@@ -459,7 +472,25 @@ export class Game {
         (this.isInRendezvousRange() || this.level.missionType === "departure" || this.level.missionType === "tutorial")
       ) {
         this.tugState = "approaching";
-        this.tugAttachTimer = 1.4;
+        this.tugAttachTimer = TUG_APPROACH_TIMEOUT;
+        // Tugs make fast to whichever flank they are already on: crossing the
+        // bows to reach "their" side wastes half the approach and invites a
+        // scrape along the topsides.
+        const ch = Math.cos(this.heading);
+        const sh = Math.sin(this.heading);
+        for (const t of this.tugs) {
+          const dx = t.worldPos.x - this.pos.x;
+          const dy = t.worldPos.y - this.pos.y;
+          const ly = -dx * sh + dy * ch;
+          if (Math.abs(ly) > 6) {
+            const over: 1 | -1 = ly > 0 ? 1 : -1;
+            if (over !== t.side) {
+              t.side = over;
+              t.pendingSide = over;
+              t.localPos = { x: t.anchorX, y: over * (SHIP_W / 2 + TUG_W / 2 + 3) };
+            }
+          }
+        }
         this.audio.tugToot(0);
         this.addText(this.pos.x, this.pos.y - SHIP_W - 22, "TUGS STEAMING TO ATTACH", "#57b98a", 20);
         this.later(() => {
@@ -723,6 +754,9 @@ export class Game {
       };
       const tug: Tug = {
         anchorX,
+        vel: { x: 0, y: 0 },
+        avoid: { x: 0, y: 0 },
+        bumpCd: 0,
         side,
         pendingSide: side,
         cmd: 0,
@@ -958,7 +992,7 @@ export class Game {
       const f = t.effort * TUG_FORCE;
       fx += right.x * f;
       fy += right.y * f;
-      torque += t.anchorX * f;
+      torque += t.anchorX * f * TUG_TORQUE_SCALE;
     }
 
     // Drag relative to the water
@@ -975,13 +1009,13 @@ export class Game {
       const vFlow = Math.min(u + propWash, 12);
       if (Math.abs(vFlow) > 0.04 || Math.abs(this.rudder) > 0.04) {
         const sternArm = -SHIP_L * 0.48;
-        const rudderLift = this.rudder * (vFlow * 1.5 + Math.sign(vFlow) * vFlow * vFlow * 0.02);
+        const rudderLift = this.rudder * (vFlow * RUDDER_LIFT + Math.sign(vFlow) * vFlow * vFlow * 0.006);
         const fRudderRight = -rudderLift;
         fx += right.x * fRudderRight;
         fy += right.y * fRudderRight;
         torque += sternArm * fRudderRight;
 
-        const rDrag = Math.abs(this.rudder) * Math.abs(vFlow) * 0.35;
+        const rDrag = Math.abs(this.rudder) * Math.abs(vFlow) * RUDDER_DRAG;
         fx -= fwd.x * rDrag;
         fy -= fwd.y * rDrag;
       }
@@ -1002,7 +1036,7 @@ export class Game {
 
     this.vel.x += fx * dt;
     this.vel.y += fy * dt;
-    this.angVel += (torque / INERTIA) * dt;
+    this.angVel = clamp(this.angVel + (torque / INERTIA) * dt, -MAX_ANGVEL, MAX_ANGVEL);
     this.pos.x += this.vel.x * dt;
     this.pos.y += this.vel.y * dt;
     this.heading += this.angVel * dt;
@@ -1735,65 +1769,57 @@ export class Game {
       for (const t of this.tugs) {
         const bobX = Math.sin(this.time * 1.5 + t.phase) * 1.4;
         const bobY = Math.cos(this.time * 1.2 + t.phase) * 1.4;
-        const targetX = t.standbyPos.x + bobX;
-        const targetY = t.standbyPos.y + bobY;
-        const dx = targetX - t.worldPos.x;
-        const dy = targetY - t.worldPos.y;
-        const dist = Math.hypot(dx, dy);
-
-        if (dist > 8) {
-          const moveAngle = Math.atan2(dy, dx);
-          t.worldPos.x = damp(t.worldPos.x, targetX, 2.0, dt);
-          t.worldPos.y = damp(t.worldPos.y, targetY, 2.0, dt);
-          t.worldAngle = dampAngle(t.worldAngle, moveAngle, 3.5, dt);
-
-          t.emitAcc += dt * 30;
-          while (t.emitAcc >= 1) {
-            t.emitAcc -= 1;
-            const fx = Math.cos(t.worldAngle);
-            const fy = Math.sin(t.worldAngle);
-            const sx = t.worldPos.x - fx * (TUG_L / 2);
-            const sy = t.worldPos.y - fy * (TUG_L / 2);
-            this.particles.foam(sx, sy, -fx * 20, -fy * 20, 1.5, 0.6);
-          }
-        } else {
-          t.worldPos.x = damp(t.worldPos.x, targetX, 3.0, dt);
-          t.worldPos.y = damp(t.worldPos.y, targetY, 3.0, dt);
-          t.worldAngle = dampAngle(t.worldAngle, Math.PI + Math.sin(this.time * 1.6 + t.phase) * 0.06, 2.5, dt);
-        }
+        this.sailTug(t, { x: t.standbyPos.x + bobX + t.avoid.x, y: t.standbyPos.y + bobY + t.avoid.y }, dt);
+        this.emitTugWake(t, dt, 26);
+        this.separateTugFromHull(t, dt);
       }
       return;
     }
 
     if (this.tugState === "approaching") {
-      const progress = clamp01(1 - this.tugAttachTimer / 1.8);
-      const ease = 1 - Math.pow(1 - progress, 3);
+      // The tugs actually steam over: accelerate from rest, run at tug speed,
+      // and ease down alongside. Attachment happens when they arrive.
+      let arrived = true;
       for (const t of this.tugs) {
-        const targetPos = { x: t.anchorX, y: t.side * (SHIP_W / 2 + TUG_W / 2 + 3) };
-        const attachedPos = {
-          x: this.pos.x + targetPos.x * c - targetPos.y * s,
-          y: this.pos.y + targetPos.x * s + targetPos.y * c,
+        const attach = { x: t.anchorX, y: t.side * (SHIP_W / 2 + TUG_W / 2 + 3) };
+        const attachPos = {
+          x: this.pos.x + attach.x * c - attach.y * s,
+          y: this.pos.y + attach.x * s + attach.y * c,
         };
-        t.worldPos = {
-          x: t.standbyPos.x + (attachedPos.x - t.standbyPos.x) * ease,
-          y: t.standbyPos.y + (attachedPos.y - t.standbyPos.y) * ease,
-        };
-        const dx = attachedPos.x - t.worldPos.x;
-        const dy = attachedPos.y - t.worldPos.y;
-        const steerAngle = Math.atan2(dy, dx);
-        t.worldAngle = progress > 0.8 ? dampAngle(steerAngle, this.heading, (progress - 0.8) / 0.2, 1) : steerAngle;
 
-        // Wake foam while steaming to ship
-        t.emitAcc += dt * 45;
-        while (t.emitAcc >= 1) {
-          t.emitAcc -= 1;
-          const fx = Math.cos(t.worldAngle);
-          const fy = Math.sin(t.worldAngle);
-          const sx = t.worldPos.x - fx * (TUG_L / 2);
-          const sy = t.worldPos.y - fy * (TUG_L / 2);
-          this.particles.foam(sx, sy, -fx * 25, -fy * 25, 2, 0.8);
+        // A tug on the wrong side of the hull runs past the nearer end first
+        // instead of grinding against the topsides.
+        const relX = t.worldPos.x - this.pos.x;
+        const relY = t.worldPos.y - this.pos.y;
+        const localX = relX * c + relY * s;
+        const localY = -relX * s + relY * c;
+        let aim = attachPos;
+        const wrongSide = localY * t.side < -4 && Math.abs(localX) < SHIP_L / 2 + 8;
+        if (wrongSide) {
+          const end = localX >= 0 ? 1 : -1;
+          const cornerX = end * (SHIP_L / 2 + 30);
+          const cornerY = t.side * 14;
+          aim = {
+            x: this.pos.x + cornerX * c - cornerY * s,
+            y: this.pos.y + cornerX * s + cornerY * c,
+          };
         }
+
+        // Velocity of the slot we are making for, including the ship's yaw.
+        const slotVel = {
+          x: this.vel.x - this.angVel * (attachPos.y - this.pos.y),
+          y: this.vel.y + this.angVel * (attachPos.x - this.pos.x),
+        };
+        this.sailTug(t, aim, dt, slotVel);
+        this.emitTugWake(t, dt, 45);
+        this.separateTugFromHull(t, dt);
+
+        // Close enough alongside to hand the line across — judged in the ship's
+        // own frame, so a tug overhauling a ship still making way still counts.
+        const gapLocal = Math.hypot(localX - attach.x, localY - attach.y);
+        if (wrongSide || gapLocal > 26) arrived = false;
       }
+      if (arrived) this.tugAttachTimer = 0;
       return;
     }
 
@@ -1826,8 +1852,9 @@ export class Game {
         targetPos = { x: t.anchorX, y: t.side * (SHIP_W / 2 + 16 + TUG_L / 2) };
         targetAngle = t.side * Math.PI * 0.5;
       }
-      t.localPos.x = damp(t.localPos.x, targetPos.x, 5.5, dt);
-      t.localPos.y = damp(t.localPos.y, targetPos.y, 5.5, dt);
+      // Tugs shuffle around the hull rather than snapping into place.
+      t.localPos.x = damp(t.localPos.x, targetPos.x, 3.2, dt);
+      t.localPos.y = damp(t.localPos.y, targetPos.y, 3.2, dt);
       t.localAngle = dampAngle(t.localAngle, targetAngle, 6, dt);
 
       const bobX = Math.sin(this.time * 1.7 + t.phase) * 0.5;
@@ -1853,6 +1880,104 @@ export class Game {
           if (Math.random() < 0.3) this.particles.spray(sx, sy, -fx * spd * 1.3, -fy * spd * 1.3, 1.4, 0.4);
         }
       }
+    }
+  }
+
+  /**
+   * Move a free-sailing tug towards a point the way a real tug answers the
+   * telegraph: she accelerates from rest, builds way, and eases down into the
+   * berth instead of teleporting.
+   */
+  private sailTug(t: Tug, target: Vec, dt: number, slotVel?: Vec) {
+    if (t.bumpCd > 0) t.bumpCd -= dt;
+    const dx = target.x - t.worldPos.x;
+    const dy = target.y - t.worldPos.y;
+    const dist = Math.hypot(dx, dy);
+    const wanted = Math.min(TUG_MAX_SPEED, dist * 1.7);
+    const dirX = dist > 0.001 ? dx / dist : 0;
+    const dirY = dist > 0.001 ? dy / dist : 0;
+    // Feed forward the berth's own motion, otherwise a tug can never overhaul a
+    // slot that is itself running away at ship speed.
+    const fwdX = slotVel ? slotVel.x : 0;
+    const fwdY = slotVel ? slotVel.y : 0;
+    let desX = fwdX + dirX * wanted;
+    let desY = fwdY + dirY * wanted;
+    // She is still a tug, not a seaplane: the target velocity stays within her
+    // own working speed even when the slot is running off at full sea speed.
+    const desMag = Math.hypot(desX, desY);
+    if (desMag > TUG_MAX_SPEED) {
+      desX *= TUG_MAX_SPEED / desMag;
+      desY *= TUG_MAX_SPEED / desMag;
+    }
+    const dvx = desX - t.vel.x;
+    const dvy = desY - t.vel.y;
+    const dv = Math.hypot(dvx, dvy);
+    const maxDv = TUG_ACCEL * dt;
+    const k = dv > maxDv ? maxDv / dv : 1;
+    t.vel.x += dvx * k;
+    t.vel.y += dvy * k;
+    t.worldPos.x += t.vel.x * dt;
+    t.worldPos.y += t.vel.y * dt;
+
+    const spd = Math.hypot(t.vel.x, t.vel.y);
+    if (spd > 1.2) {
+      t.worldAngle = dampAngle(t.worldAngle, Math.atan2(t.vel.y, t.vel.x), 3.2, dt);
+    } else {
+      t.worldAngle = dampAngle(t.worldAngle, Math.PI + Math.sin(this.time * 1.6 + t.phase) * 0.06, 2.2, dt);
+    }
+  }
+
+  /** Stern wake, scaled by the tug's own speed. */
+  private emitTugWake(t: Tug, dt: number, rate: number) {
+    const spd = Math.hypot(t.vel.x, t.vel.y);
+    if (spd < 1.5 || this.phase === "paused") return;
+    t.emitAcc += dt * rate * clamp01(spd / 30);
+    const fx = Math.cos(t.worldAngle);
+    const fy = Math.sin(t.worldAngle);
+    while (t.emitAcc >= 1) {
+      t.emitAcc -= 1;
+      const sx = t.worldPos.x - fx * (TUG_L / 2);
+      const sy = t.worldPos.y - fy * (TUG_L / 2);
+      this.particles.foam(sx, sy, -fx * spd * 0.8, -fy * spd * 0.8, 1.5, 0.7);
+    }
+  }
+
+  /**
+   * A tug is not a ghost: if the hull is driven into one, the tug is shoved
+   * clear with a wet thump instead of the ship passing through it.
+   */
+  private separateTugFromHull(t: Tug, dt: number) {
+    const poly = transformPoly(HULL, this.pos, this.heading);
+    const contact = circleVsPolygon(t.worldPos, TUG_COLLIDE_R, poly);
+
+    // Ease the avoidance offset back once the hull is no longer leaning on her.
+    const decay = Math.exp(-0.6 * dt);
+    t.avoid.x *= decay;
+    t.avoid.y *= decay;
+
+    if (!contact) return;
+
+    const push = contact.depth + 1.2;
+    t.avoid.x = clamp(t.avoid.x + contact.normal.x * push * 0.5, -140, 140);
+    t.avoid.y = clamp(t.avoid.y + contact.normal.y * push * 0.5, -140, 140);
+
+    t.worldPos.x += contact.normal.x * (contact.depth + 0.15);
+    t.worldPos.y += contact.normal.y * (contact.depth + 0.15);
+    const vn = t.vel.x * contact.normal.x + t.vel.y * contact.normal.y;
+    if (vn < 0) {
+      t.vel.x -= contact.normal.x * vn * 1.35;
+      t.vel.y -= contact.normal.y * vn * 1.35;
+    }
+
+    if (t.bumpCd <= 0 && Math.abs(vn) > 1.2) {
+      t.bumpCd = 1.4;
+      this.audio.bump();
+      this.particles.burst(t.worldPos.x, t.worldPos.y, "foam", 8, 22, contact.normal.x, contact.normal.y);
+      // The ship barely notices, but does notice.
+      this.vel.x -= contact.normal.x * 0.08;
+      this.vel.y -= contact.normal.y * 0.08;
+      this.trauma = Math.min(1, this.trauma + 0.05);
+      if (this.phase === "playing") this.addText(t.worldPos.x, t.worldPos.y - 12, "TUG CLEARED", "#e0b877", 12);
     }
   }
 

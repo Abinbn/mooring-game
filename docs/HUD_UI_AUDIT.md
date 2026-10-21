@@ -92,7 +92,7 @@ The interface was rebuilt around a restrained maritime instrument style:
 - **Layout:** one instrument strip instead of three floating glass cards; the
   hull line is part of it. The touch pad gains a landscape variant.
 - **Copy:** "juicy", "★ New harbour record ★" and emoji punctuation replaced with
-  plain, specific language ("New harbour record", "Take the helm").
+  plain, specific language ("New harbour record", "Play", "Main menu").
 
 ### Verification
 - `npm run typecheck` — clean.
@@ -104,3 +104,54 @@ The interface was rebuilt around a restrained maritime instrument style:
   gradient/glow classes.
 - `npm run build` — single 368 kB `dist/index.html` (111 kB gzipped), no external
   requests at runtime.
+
+## Second pass — handling, cockpit and player identity
+
+Follow-up round after playing the merged build: the hull answered the helm like a
+speedboat, the tugs teleported, the pad was a patchwork of sizes, and repeated
+runs piled up duplicate score entries for the same person.
+
+### Handling
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| A 200 m hull could be spun on the spot. | Rudder lift was linear in speed with no ceiling; yaw inertia was low. | `MAX_ANGVEL = 0.075 rad/s` (≈4.3 °/s) hard cap, `RUDDER_LIFT = 0.5`, extra rudder drag, `INERTIA = 1500`, `K_ANG = 0.9`. Measured peak yaw: **22 °/s → 4.3 °/s**. |
+| The ship stopped dead instead of drifting. | Heavy linear longitudinal drag. | `K_LONG = 0.095`, `C_LONG = 0.0016`. Coasting from 4 u/s still leaves **1.35 u/s at 10 s, 0.51 at 20 s, 0.20 at 30 s** — any way at all keeps her moving. |
+| Turning scrubbed off all speed. | Rudder drag multiplied the whole flow vector. | Drag applies to the athwartships component only; 4 s of hard helm at 9 u/s leaves 4.4 u/s of headway. |
+| Tugs jumped from the quay to the hull. | Attachment was a smoothstep on a timer, not motion. | Tugs are free-sailing bodies: `TUG_ACCEL = 30 u/s²` from rest up to `TUG_MAX_SPEED = 92`, aimed at the slot with the berth's own velocity fed forward, so they **build way, run, and ease alongside** in ≈3 s from 200 u out (≈7 s if the ship is already making full sea speed). They make fast to the flank they are already on, and a tug that does end up on the wrong side runs past the nearest end first instead of grinding along the topsides. |
+| The hull passed straight through a waiting tug. | No tug collision at all. | Circle-vs-hull SAT against `transformPoly(HULL, …)`: the tug is shoved clear, the ship loses a little way, foam and a "TUG CLEARED" caption fire, and a decaying avoidance offset keeps her from jam-cleating against the topsides. |
+
+### Pad
+
+- Every control is the same 54 px square (44 px on short landscape): Ahead/Astern
+  match the bow/stern arrows, Horn matches Summon/Cast off.
+- The **Link** switch sits between **Push** and **Pull** when the tugs are
+  attached (and in the middle of the four arrows when they are independent).
+- The **speed read-out moved above the Ahead button**, where the eye already is.
+
+### Onboarding & scores
+
+- A run only starts from a button press; `Enter`/`Space` no longer launch from
+  the menu. `Escape` pauses, `P` toggles pause, `M` mutes, `R` restarts.
+- The start screen loses the mission tagline and the "harbour office" / "take the
+  helm" jargon: **Play**, **Main menu**, "Press a button to begin."
+- **One pilot per device.** The callsign lives in `localStorage`, is editable from
+  the options menu, and a run is logged silently under it — no form, no second
+  row. `addScore` keeps one row per callsign (best run wins) and normalises the
+  returned rank.
+
+### Motion comfort
+
+Scrolling water layers, current streaks, rock dashes, berth chevrons and labels
+now drift **forward only** and at roughly a third of the old rate; `render` never
+scrolls a wave texture backwards, which is what made some levels feel like the
+camera was reversing.
+
+### Verification
+- `npm run typecheck` — clean.
+- `npm run selfcheck` — 268/268 invariants still pass with the new handling.
+- Headless `Game` probes: yaw cap, coast decay, tug speed ramp, tug arrival time
+  on three levels, hull-vs-standby-tug separation.
+- SSR render of the start and game-over screens: no jargon, no key-to-start hint,
+  logged-pilot line present, name form suppressed for a known callsign.
+- `npm run build` — single 370 kB `dist/index.html` (112 kB gzipped).
