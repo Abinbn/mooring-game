@@ -1,22 +1,31 @@
 import { useEffect, useRef, useState } from "react";
-import type { Breakdown, GameOverInfo } from "@/game/Game";
+import { LEVEL_CLEAR_HOLD, type Breakdown, type GameOverInfo } from "@/game/Game";
 import type { SavedRunState } from "@/game/savedRun";
 import type { ScoreEntry } from "@/game/highscores";
+import { Icon } from "@/components/icons";
 import { cn } from "@/utils/cn";
 
-/* ───────────────────────── Shared bits ───────────────────────── */
+/* ───────────────────────── Shared ───────────────────────── */
 
-export function Overlay({ children, dark = true, className }: { children: React.ReactNode; dark?: boolean; className?: string }) {
+export function Overlay({
+  children,
+  dark = true,
+  className,
+}: {
+  children: React.ReactNode;
+  dark?: boolean;
+  className?: string;
+}) {
   return (
     <div
       className={cn(
         "anim-fade absolute inset-0 flex flex-col items-center overflow-y-auto no-scrollbar font-display",
-        dark ? "bg-[radial-gradient(ellipse_at_center,rgba(6,32,43,0.55),rgba(3,14,20,0.92))]" : "",
+        dark ? "bg-[rgba(4,20,27,0.86)]" : "",
         className,
       )}
       style={{
-        paddingTop: "max(16px, env(safe-area-inset-top))",
-        paddingBottom: "max(16px, env(safe-area-inset-bottom))",
+        paddingTop: "max(14px, env(safe-area-inset-top))",
+        paddingBottom: "max(14px, env(safe-area-inset-bottom))",
         touchAction: "pan-y",
       }}
     >
@@ -25,27 +34,39 @@ export function Overlay({ children, dark = true, className }: { children: React.
   );
 }
 
-export function HighScoreTable({ scores, highlight, compact = false }: { scores: ScoreEntry[]; highlight?: number; compact?: boolean }) {
+function levelLabel(level: number) {
+  return level === 0 ? "Academy" : `Lv ${level}`;
+}
+
+export function HighScoreTable({
+  scores,
+  highlight,
+  compact = false,
+}: {
+  scores: ScoreEntry[];
+  highlight?: number;
+  compact?: boolean;
+}) {
   if (scores.length === 0) {
-    return <div className="py-3 text-center text-sm text-cyan-100/60">No berths logged yet. Be the first harbour pilot!</div>;
+    return <p className="px-1 py-3 text-[13px] text-paper-mute">No berths logged yet. The first entry is yours.</p>;
   }
   const list = compact ? scores.slice(0, 5) : scores;
   return (
-    <ol className="w-full space-y-1">
+    <ol className="w-full">
       {list.map((s, i) => (
         <li
           key={`${s.date}-${i}`}
           className={cn(
-            "flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm",
-            i === highlight ? "bg-amber-400/20 ring-1 ring-amber-300/70 text-amber-100" : "bg-white/[0.04] text-cyan-50/90",
+            "flex items-center gap-3 border-b border-paper/[0.06] px-1 py-1.5 text-[13px] last:border-b-0",
+            i === highlight ? "bg-signal/10 text-paper" : "text-paper-dim",
           )}
         >
-          <span className={cn("w-6 text-right font-black tabular-nums", i === 0 ? "text-amber-300" : i < 3 ? "text-cyan-200" : "text-cyan-100/50")}>{i + 1}</span>
-          <span className="flex-1 truncate font-bold tracking-wide">{s.name}</span>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-200/60">
-            {s.level === 0 ? "Academy" : `Lv ${s.level}`}
+          <span className={cn("num w-5 text-right text-[11px] font-semibold", i === 0 ? "text-signal" : "text-paper-mute")}>
+            {i + 1}
           </span>
-          <span className="w-20 text-right font-black tabular-nums text-white">{s.score.toLocaleString()}</span>
+          <span className="flex-1 truncate font-medium text-paper">{s.name}</span>
+          <span className="label shrink-0 text-paper-mute">{levelLabel(s.level)}</span>
+          <span className="num w-16 shrink-0 text-right font-semibold text-paper">{s.score.toLocaleString()}</span>
         </li>
       ))}
     </ol>
@@ -83,12 +104,13 @@ export function StartScreen({
   const [activeModal, setActiveModal] = useState<StartModal>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  // Keyboard users land inside the dialog instead of tabbing through the page.
   useEffect(() => {
-    if (activeModal) closeRef.current?.focus();
+    if (!activeModal) return;
+    closeRef.current?.focus();
   }, [activeModal]);
 
-  // Close dropdown or modal with Escape, and prevent Space/Enter from starting game when modal is open
+  // Escape closes; Enter/Space must not leak through to "start game" while a
+  // dialog is open.
   useEffect(() => {
     if (!activeModal && !menuOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -106,83 +128,59 @@ export function StartScreen({
 
   return (
     <Overlay>
-      {/* Top right dropdown menu */}
-      <div className="absolute right-3 top-3 z-30 sm:right-6 sm:top-5">
+      {/* Options */}
+      <div className="absolute right-2 top-2 z-30 sm:right-4 sm:top-3">
         <div className="relative">
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
             className={cn(
-              "flex h-10 items-center gap-2 rounded-xl border border-cyan-300/30 bg-black/45 px-3 py-2 text-cyan-100 shadow-lg backdrop-blur-md transition-all hover:border-cyan-300/60 hover:bg-cyan-500/20 active:scale-95 cursor-pointer",
-              menuOpen && "border-cyan-300/80 bg-cyan-500/25 shadow-[0_0_18px_rgba(56,225,255,0.35)]",
+              "btn-ghost flex h-9 items-center gap-2 rounded-md px-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] cursor-pointer",
+              menuOpen && "border-paper/50 bg-paper/10",
             )}
-            aria-label="Open options menu"
+            aria-label="Options"
             aria-expanded={menuOpen}
           >
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="4" y1="6" x2="20" y2="6" />
-              <line x1="4" y1="12" x2="20" y2="12" />
-              <line x1="4" y1="18" x2="20" y2="18" />
-            </svg>
-            <span className="text-xs font-bold uppercase tracking-wider hidden sm:inline">Options</span>
-            <span className={cn("text-[10px] transition-transform duration-200", menuOpen ? "rotate-180" : "")}>▾</span>
+            <Icon name="menu" className="h-4 w-4" />
+            <span className="hidden sm:inline">Options</span>
           </button>
 
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
-              <div className="panel anim-pop absolute right-0 top-full mt-2 w-60 rounded-2xl border border-cyan-300/35 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.65)] backdrop-blur-xl z-40">
-                {/* Sound Toggle */}
+              <div className="panel anim-pop absolute right-0 top-full z-40 mt-1.5 w-56 rounded-lg p-1">
                 <button
                   type="button"
-                  onClick={() => {
-                    onMute();
-                  }}
-                  className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-bold text-cyan-50 transition-colors hover:bg-cyan-500/20 cursor-pointer"
+                  onClick={onMute}
+                  className="flex w-full items-center justify-between rounded px-2.5 py-2 text-[12px] font-medium text-paper transition-colors hover:bg-paper/10 cursor-pointer"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-base">{muted ? "🔇" : "🔊"}</span>
-                    <span>Sound Effects</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={cn(
-                        "rounded-md px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider",
-                        muted ? "bg-red-500/20 text-red-300 border border-red-400/30" : "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30",
-                      )}
-                    >
-                      {muted ? "Off" : "On"}
-                    </span>
-                    {!touch && <span className="text-[10px] text-cyan-200/50">M</span>}
-                  </div>
+                  <span className="flex items-center gap-2">
+                    <Icon name={muted ? "volumeOff" : "volume"} className="h-4 w-4" />
+                    Sound
+                  </span>
+                  <span className={cn("label", muted ? "text-danger" : "text-safe")}>{muted ? "Off" : "On"}</span>
                 </button>
-
-                {/* Privacy Policy */}
                 <button
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
                     setActiveModal("privacy");
                   }}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-bold text-cyan-50 transition-colors hover:bg-cyan-500/20 cursor-pointer"
+                  className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-[12px] font-medium text-paper transition-colors hover:bg-paper/10 cursor-pointer"
                 >
-                  <span className="text-base">🛡️</span>
-                  <span>Privacy Policy</span>
+                  <Icon name="shield" className="h-4 w-4" />
+                  Privacy
                 </button>
-
-                {/* Info & About */}
                 <button
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
                     setActiveModal("info");
                   }}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-bold text-cyan-50 transition-colors hover:bg-cyan-500/20 cursor-pointer"
+                  className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-[12px] font-medium text-paper transition-colors hover:bg-paper/10 cursor-pointer"
                 >
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-400/20 text-xs font-black text-cyan-300 ring-1 ring-cyan-300/50">
-                    i
-                  </span>
-                  <span>Info & About</span>
+                  <Icon name="info" className="h-4 w-4" />
+                  About
                 </button>
               </div>
             </>
@@ -190,291 +188,216 @@ export function StartScreen({
         </div>
       </div>
 
-      {/* Main Home Screen Center Content */}
-      <div className="flex w-full max-w-4xl flex-1 flex-col items-center justify-center gap-6 px-4 py-6">
+      <div className="flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-5 px-4 py-6">
+        {/* Wordmark */}
         <div className="anim-pop text-center">
-          <h1 className="leading-[0.9]">
-            <span className="title-gradient block text-5xl font-black uppercase tracking-tight sm:text-7xl md:text-8xl">Dead Slow</span>
-            <span className="title-amber block text-5xl font-black uppercase tracking-tight sm:text-7xl md:text-8xl">Ahead</span>
+          <div className="label text-teal">Harbour pilotage</div>
+          <h1 className="mt-1 text-4xl font-bold uppercase leading-[0.95] tracking-[0.02em] text-paper sm:text-6xl">
+            Dead Slow
+            <span className="block text-signal">Ahead</span>
           </h1>
+          <p className="mt-2 text-[12px] text-paper-dim sm:text-[13px]">
+            Bring a 200-metre cargo ship alongside with two tugs. No rush — that is the point.
+          </p>
         </div>
 
-        {/* Buttons */}
-        <div className="anim-pop flex flex-col items-center gap-3 w-full max-w-sm sm:max-w-md" style={{ animationDelay: "0.1s" }}>
+        {/* Actions */}
+        <div className="anim-pop flex w-full max-w-sm flex-col items-stretch gap-2" style={{ animationDelay: "0.06s" }}>
           {savedRun && onResume ? (
             <>
-              {/* Resume — full width, prominent */}
               <button
                 type="button"
                 onClick={onResume}
-                className="btn-primary anim-pulse-glow flex w-full items-center justify-center gap-2 rounded-2xl px-8 py-3.5 text-2xl font-black uppercase tracking-widest cursor-pointer sm:py-4 sm:text-3xl"
+                className="btn-primary flex items-center justify-center gap-2 rounded-md px-6 py-3 text-base font-bold uppercase tracking-[0.06em] cursor-pointer"
               >
-                <span>Resume</span>
-                <span className="text-base sm:text-lg font-bold opacity-85">
-                  ({savedRun.levelIndex === 0 ? "Academy" : `Lv ${savedRun.levelIndex}`})
-                </span>
+                Resume
+                <span className="label opacity-70">({levelLabel(savedRun.levelIndex)})</span>
               </button>
-              {/* How To + New Run side by side */}
-              <div className="flex w-full gap-3">
+              <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setActiveModal("howto")}
-                  className="btn-ghost flex flex-1 items-center justify-center gap-2 rounded-2xl border-2 border-cyan-400/40 bg-cyan-950/45 px-4 py-3 text-base font-black uppercase tracking-wider text-cyan-100 backdrop-blur-md transition-all hover:border-cyan-300 hover:bg-cyan-500/25 active:scale-95 cursor-pointer"
+                  className="btn-ghost flex-1 rounded-md px-4 py-2.5 text-[12px] font-semibold uppercase tracking-[0.06em] cursor-pointer"
                 >
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-400/20 text-xs font-black text-cyan-300 ring-1 ring-cyan-300/60">?</span>
-                  <span>How to ?</span>
+                  How to play
                 </button>
                 <button
                   type="button"
                   onClick={onPlay}
-                  className="btn-ghost flex flex-1 items-center justify-center rounded-2xl border border-cyan-400/35 bg-cyan-950/30 px-4 py-3 text-base font-black uppercase tracking-wider text-cyan-200 hover:bg-cyan-500/20 hover:text-white cursor-pointer active:scale-95 transition-all"
-                  title="Start fresh from Level 1"
+                  className="btn-ghost flex-1 rounded-md px-4 py-2.5 text-[12px] font-semibold uppercase tracking-[0.06em] cursor-pointer"
+                  title="Start again from contract 1"
                 >
-                  New Run
+                  New contract
                 </button>
               </div>
             </>
           ) : (
-            /* No saved run: How To left of Play */
-            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
-              <button
-                type="button"
-                onClick={() => setActiveModal("howto")}
-                className="btn-ghost flex items-center gap-2.5 rounded-2xl border-2 border-cyan-400/40 bg-cyan-950/45 px-6 py-3.5 text-lg font-black uppercase tracking-wider text-cyan-100 shadow-[0_4px_20px_rgba(56,225,255,0.12)] backdrop-blur-md transition-all hover:border-cyan-300 hover:bg-cyan-500/25 hover:text-white active:scale-95 cursor-pointer sm:px-8 sm:py-4 sm:text-2xl"
-              >
-                <span className="flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full bg-cyan-400/20 text-xs sm:text-sm font-black text-cyan-300 ring-1 ring-cyan-300/60">?</span>
-                <span>How to ?</span>
-              </button>
+            <>
               <button
                 type="button"
                 onClick={onPlay}
-                className="btn-primary anim-pulse-glow rounded-2xl px-10 py-3.5 text-2xl font-black uppercase tracking-widest cursor-pointer sm:px-14 sm:py-4 sm:text-3xl"
+                className="btn-primary flex items-center justify-center gap-2 rounded-md px-6 py-3 text-base font-bold uppercase tracking-[0.06em] cursor-pointer"
               >
-                Play
+                <Icon name="play" className="h-4 w-4" />
+                Take the helm
               </button>
-            </div>
+              <button
+                type="button"
+                onClick={() => setActiveModal("howto")}
+                className="btn-ghost rounded-md px-4 py-2.5 text-[12px] font-semibold uppercase tracking-[0.06em] cursor-pointer"
+              >
+                How to play
+              </button>
+            </>
           )}
-          <div className="text-xs font-semibold tracking-wide text-cyan-100/60">
+          <p className="mt-1 text-center text-[11px] text-paper-mute">
             {touch
               ? savedRun
-                ? "Tap Resume to continue or New Run to restart"
-                : "Tap Play to start"
+                ? "Resume your contract, or start again from the first berth"
+                : "Tap to start"
               : savedRun
-                ? "Press Enter or Space to resume"
-                : "Press Enter or Space"}
-          </div>
+                ? "Enter to resume · Esc for options"
+                : "Enter or Space to start"}
+          </p>
         </div>
 
-        {/* Leaderboard below the buttons */}
-        <div className="panel anim-pop flex w-full max-w-lg flex-col rounded-2xl p-4 sm:p-5" style={{ animationDelay: "0.18s" }}>
-          <div className="mb-3 flex items-center gap-2 border-b border-cyan-300/15 pb-2 text-xs font-extrabold uppercase tracking-[0.25em] text-cyan-300 sm:text-sm">
-            <span className="text-amber-300 text-sm">⚓</span>
-            <span>Harbour log · Top pilots</span>
+        {/* Harbour log */}
+        <div className="panel anim-pop w-full max-w-md rounded-lg p-3 sm:p-4" style={{ animationDelay: "0.12s" }}>
+          <div className="mb-1.5 flex items-center justify-between border-b border-paper/10 pb-1.5">
+            <span className="label text-paper-dim">Harbour log</span>
+            <span className="label text-paper-mute">Top pilots</span>
           </div>
           <HighScoreTable scores={scores} compact />
-          <div className="mt-3 border-t border-cyan-300/10 pt-2 text-center text-[11px] text-cyan-100/50">
-            {touch ? "Tap the pause button (top right) during a run" : "P / Esc pauses · M mutes · R restarts after a run"}
-          </div>
+          <p className="mt-2 border-t border-paper/[0.08] pt-2 text-center text-[11px] text-paper-mute">
+            {touch ? "Pause from the top-right during a run" : "P / Esc pause · M mute · R restart"}
+          </p>
         </div>
       </div>
 
-      {/* Modals: How To, Privacy Policy, Info */}
+      {/* Dialogs */}
       {activeModal && (
         <div
-          className="anim-fade fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+          className="anim-fade fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
           onClick={() => setActiveModal(null)}
         >
           <div
             role="dialog"
             aria-modal="true"
-            aria-label={
-              activeModal === "howto" ? "How to berth" : activeModal === "privacy" ? "Privacy policy" : "About Dead Slow Ahead"
-            }
-            className="panel anim-pop relative max-h-[90vh] w-full max-w-lg overflow-y-auto no-scrollbar rounded-3xl border border-cyan-300/35 p-5 text-cyan-50 shadow-2xl sm:p-6"
+            aria-label={activeModal === "howto" ? "How to play" : activeModal === "privacy" ? "Privacy" : "About"}
+            className="panel anim-pop relative max-h-[88vh] w-full max-w-lg overflow-y-auto no-scrollbar rounded-lg p-4 text-paper shadow-2xl sm:p-5"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close Button */}
             <button
               ref={closeRef}
               type="button"
               onClick={() => setActiveModal(null)}
-              className="btn-ghost absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-xl text-lg font-bold text-cyan-200 hover:text-white cursor-pointer"
-              aria-label="Close modal"
+              className="btn-ghost absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-md cursor-pointer"
+              aria-label="Close"
             >
-              ✕
+              <Icon name="close" className="h-4 w-4" />
             </button>
 
-            {/* How to Berth Modal */}
             {activeModal === "howto" && (
               <div>
-                <div className="mb-4 text-center">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.3em] text-cyan-300">Harbour Pilot Guide</div>
-                  <h2 className="title-gradient mt-1 text-3xl font-black uppercase sm:text-4xl">How to Berth</h2>
-                </div>
-                <ul className="space-y-3 text-sm text-cyan-50/90">
-                  <li className="flex items-center gap-3">
-                    <span className="flex gap-1">
-                      {touch ? (
-                        <Key wide>▲ ▼</Key>
-                      ) : (
-                        <>
-                          <Key>W</Key>
-                          <Key>S</Key>
-                        </>
-                      )}
-                    </span>
-                    <span>
-                      <b className="text-amber-200">Engine</b> ahead / astern. She's 200 m of steel — brake early.
-                    </span>
+                <div className="label text-teal">Operating notes</div>
+                <h2 className="mt-0.5 text-2xl font-semibold uppercase tracking-[0.02em]">How to berth</h2>
+                <ul className="mt-4 space-y-2.5 text-[13px] text-paper-dim">
+                  <li className="flex items-start gap-3">
+                    <span className="flex shrink-0 gap-1">{touch ? <Key wide><Icon name="chevronUp" className="h-3.5 w-3.5" /><Icon name="chevronDown" className="h-3.5 w-3.5" /></Key> : <><Key>W</Key><Key>S</Key></>}</span>
+                    <span><b className="font-semibold text-paper">Engine</b> ahead and astern. A loaded ship carries her momentum for a long way — brake early.</span>
                   </li>
-                  <li className="flex items-center gap-3">
-                    <span className="flex gap-1">
-                      {touch ? (
-                        <Key wide>BOW ◀ ▶</Key>
-                      ) : (
-                        <>
-                          <Key>Q</Key>
-                          <Key>E</Key>
-                        </>
-                      )}
-                    </span>
-                    <span>
-                      <b className="text-cyan-200">Bow tug</b> pushes or pulls the bow sideways.
-                    </span>
+                  <li className="flex items-start gap-3">
+                    <span className="flex shrink-0 gap-1">{touch ? <Key wide>Bow</Key> : <><Key>Q</Key><Key>E</Key></>}</span>
+                    <span><b className="font-semibold text-paper">Bow tug</b> pushes or pulls the bow sideways.</span>
                   </li>
-                  <li className="flex items-center gap-3">
-                    <span className="flex gap-1">
-                      {touch ? (
-                        <Key wide>STERN ◀ ▶</Key>
-                      ) : (
-                        <>
-                          <Key>A</Key>
-                          <Key>D</Key>
-                        </>
-                      )}
-                    </span>
-                    <span>
-                      <b className="text-cyan-200">Stern tug / Rudder</b>: swings stern sideways. Ship can also steer solo with rudder + engine wash!
-                    </span>
+                  <li className="flex items-start gap-3">
+                    <span className="flex shrink-0 gap-1">{touch ? <Key wide>Stern</Key> : <><Key>A</Key><Key>D</Key></>}</span>
+                    <span><b className="font-semibold text-paper">Stern tug</b> swings the stern; without tugs the same keys work the rudder.</span>
                   </li>
-                  <li className="flex items-center gap-3 border-t border-cyan-300/15 pt-2.5">
-                    <span className="flex gap-1">
-                      {touch ? <span className="kbd text-cyan-200">⚓</span> : <Key>T</Key>}
-                    </span>
-                    <span>
-                      <b className="text-cyan-200">Attach / Detach Tugs [T]</b>: summon tugs in pilot station, or cast them off for narrow gates & solo handling.
-                    </span>
+                  <li className="flex items-start gap-3 border-t border-paper/10 pt-2.5">
+                    <span className="flex shrink-0 gap-1">{touch ? <span className="kbd"><Icon name="anchor" className="h-4 w-4" /></span> : <Key>T</Key>}</span>
+                    <span><b className="font-semibold text-paper">Attach / cast off tugs.</b> Summon them inside the pilot station; cast off for narrow gates and for leaving harbour.</span>
                   </li>
-                  <li className="flex items-center gap-3">
-                    <span className="flex gap-1">
-                      {touch ? <span className="kbd text-amber-200">📯</span> : <Key>H</Key>}
-                    </span>
-                    <span>
-                      <b className="text-amber-200">Ship foghorn</b>: blast for maritime acoustic salute & atmospheric echo!
-                    </span>
+                  <li className="flex items-start gap-3">
+                    <span className="flex shrink-0 gap-1">{touch ? <span className="kbd"><Icon name="horn" className="h-4 w-4" /></span> : <Key>H</Key>}</span>
+                    <span><b className="font-semibold text-paper">Ship horn.</b> No mechanical use. It does sound magnificent.</span>
                   </li>
-                  <li className="flex items-center gap-3 border-t border-cyan-300/15 pt-2.5">
-                    <span className="kbd text-cyan-300">◎</span>
-                    <span>
-                      Park inside the <b className="text-cyan-200">dashed outline</b>, square to the quay, nearly stopped. Hold position to secure braided mooring lines.
-                    </span>
+                  <li className="flex items-start gap-3 border-t border-paper/10 pt-2.5">
+                    <span className="kbd shrink-0"><Icon name="compass" className="h-4 w-4" /></span>
+                    <span>Park inside the dashed outline, square to the quay, nearly stopped. Hold position until the lines are secured.</span>
                   </li>
-                  <li className="flex items-center gap-3">
-                    <span className="kbd text-emerald-300">⚓</span>
-                    <span>
-                      <b className="text-emerald-200">Pilot Boundary</b>: Harbour tugs cannot leave pilot limits (-5 pts/tick). Dragging tugs to open sea fails contract!
-                    </span>
+                  <li className="flex items-start gap-3">
+                    <span className="kbd shrink-0"><Icon name="alert" className="h-4 w-4" /></span>
+                    <span><b className="font-semibold text-paper">Pilot limit.</b> Tugs may not leave the pilot area. Dragging them past it fines you, then revokes the contract.</span>
                   </li>
-                  <li className="flex items-center gap-3">
-                    <span className="kbd text-red-300">✶</span>
-                    <span>
-                      Hard knocks cost <b className="text-red-300">hull</b>. Soft touches, fast times and perfect alignment score big.
-                    </span>
+                  <li className="flex items-start gap-3">
+                    <span className="kbd shrink-0"><Icon name="star" className="h-4 w-4" /></span>
+                    <span>Hard knocks cost hull. Soft touches, quick work and clean alignment pay best.</span>
                   </li>
                 </ul>
-                <div className="mt-6 flex justify-end">
+                <div className="mt-5">
                   <button
                     type="button"
                     onClick={() => {
                       setActiveModal(null);
                       onStartTutorial?.();
                     }}
-                    className="btn-primary flex items-center justify-center gap-2 w-full rounded-xl py-3 text-base font-black uppercase tracking-wider cursor-pointer"
+                    className="btn-ghost flex w-full items-center justify-center gap-2 rounded-md py-2.5 text-[12px] font-semibold uppercase tracking-[0.06em] cursor-pointer"
                   >
-                    <span>🎓</span>
-                    <span>Pilot Academy</span>
+                    <Icon name="compass" className="h-4 w-4" />
+                    Open pilot academy
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Privacy Policy Modal */}
             {activeModal === "privacy" && (
               <div>
-                <div className="mb-4 text-center">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.3em] text-cyan-300">Transparency & Safety</div>
-                  <h2 className="title-gradient mt-1 text-3xl font-black uppercase sm:text-4xl">Privacy Policy</h2>
+                <div className="label text-teal">Transparency</div>
+                <h2 className="mt-0.5 text-2xl font-semibold uppercase tracking-[0.02em]">Privacy</h2>
+                <div className="mt-4 space-y-3 text-[13px] text-paper-dim">
+                  <p>Dead Slow Ahead runs entirely in your browser. Scores, callsigns and settings are kept in your browser's local storage on this device.</p>
+                  <p>There are no cookies, analytics, advertising identifiers or tracking scripts, and the game makes no network requests while it runs.</p>
+                  <p>Clearing your browser's site data removes your harbour log and preferences.</p>
                 </div>
-                <div className="space-y-3.5 text-xs sm:text-sm text-cyan-100/85">
-                  <div className="rounded-xl bg-white/[0.04] p-3 border border-cyan-300/10">
-                    <div className="font-extrabold text-cyan-200 uppercase tracking-wider text-xs mb-1">Local Storage Only</div>
-                    <p>Dead Slow Ahead runs entirely in your browser. All gameplay scores, pilot callsigns, and audio settings are kept solely in your browser's local storage.</p>
-                  </div>
-                  <div className="rounded-xl bg-white/[0.04] p-3 border border-cyan-300/10">
-                    <div className="font-extrabold text-cyan-200 uppercase tracking-wider text-xs mb-1">Zero Telemetry & Tracking</div>
-                    <p>No cookies, advertising identifiers, or analytics tracking scripts are embedded. No external servers receive your personal data.</p>
-                  </div>
-                  <div className="rounded-xl bg-white/[0.04] p-3 border border-cyan-300/10">
-                    <div className="font-extrabold text-cyan-200 uppercase tracking-wider text-xs mb-1">Data Ownership</div>
-                    <p>You can reset your harbour records and preferences at any time by clearing your browser cache and site data.</p>
-                  </div>
-                </div>
-                <div className="mt-6 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setActiveModal(null)}
-                    className="btn-ghost w-full rounded-xl py-2.5 text-sm font-bold uppercase tracking-wider cursor-pointer"
-                  >
-                    Close
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="btn-ghost mt-5 w-full rounded-md py-2 text-[12px] font-semibold uppercase tracking-[0.06em] cursor-pointer"
+                >
+                  Close
+                </button>
               </div>
             )}
 
-            {/* Info & About Modal */}
             {activeModal === "info" && (
               <div>
-                <div className="mb-4 text-center">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.3em] text-cyan-300">Harbour Simulator</div>
-                  <h2 className="title-gradient mt-1 text-3xl font-black uppercase sm:text-4xl">About Dead Slow</h2>
-                </div>
-                <div className="space-y-3 text-xs sm:text-sm text-cyan-100/85">
+                <div className="label text-teal">About</div>
+                <h2 className="mt-0.5 text-2xl font-semibold uppercase tracking-[0.02em]">Dead Slow Ahead</h2>
+                <div className="mt-4 space-y-3 text-[13px] text-paper-dim">
                   <p>
-                    <b className="text-white">Dead Slow Ahead</b> is a precision maritime simulator recreating the physics of heavy cargo vessels and tugboat berthing operations.
+                    A berthing game about the least dramatic part of shipping: bringing a very large object to a stop in
+                    exactly the right place, at about the speed of a walking person.
                   </p>
-                  <div className="rounded-xl bg-white/[0.04] p-3 border border-cyan-300/10 space-y-1.5">
-                    <div className="font-extrabold text-amber-300 uppercase tracking-wider text-xs">Scoring System</div>
-                    <div className="text-xs space-y-1">
-                      <div>• <b className="text-cyan-200">Base Fee:</b> Fixed contract payment per completed berth.</div>
-                      <div>• <b className="text-cyan-200">Time Bonus:</b> Bonus awarded for swift berthing manoeuvres.</div>
-                      <div>• <b className="text-cyan-200">Precision:</b> Score for parallel alignment and dock centering.</div>
-                      <div>• <b className="text-cyan-200">Gentle Handling:</b> Preservation bonus for zero hull impacts.</div>
-                      <div>• <b className="text-cyan-200">Streak Multiplier:</b> Consecutive perfect berths multiply your earnings.</div>
-                    </div>
+                  <div className="rounded border border-paper/10 p-2.5">
+                    <div className="label mb-1.5 text-signal">Scoring</div>
+                    <ul className="space-y-1 text-[12px]">
+                      <li>Contract fee — paid for every completed job.</li>
+                      <li>Time bonus — for working quickly.</li>
+                      <li>Precision — for alignment and centring.</li>
+                      <li>Gentle handling — for a clean hull.</li>
+                      <li>Streak — consecutive perfect jobs multiply the fee.</li>
+                    </ul>
                   </div>
-                  <p className="text-xs text-cyan-200/70 italic">
-                    Tip: Massive container ships carry massive momentum. Counter-steer with your tugs well before reaching the quay wall!
-                  </p>
+                  <p>Physics, audio and visuals are generated at run time. No external assets, no network calls.</p>
                 </div>
-                <div className="mt-6 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setActiveModal(null)}
-                    className="btn-ghost w-full rounded-xl py-2.5 text-sm font-bold uppercase tracking-wider cursor-pointer"
-                  >
-                    Close
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="btn-ghost mt-5 w-full rounded-md py-2 text-[12px] font-semibold uppercase tracking-[0.06em] cursor-pointer"
+                >
+                  Close
+                </button>
               </div>
             )}
           </div>
@@ -486,46 +409,44 @@ export function StartScreen({
 
 /* ───────────────────────── Pause ───────────────────────── */
 
-export function PauseScreen({ onResume, onRestart, onMenu, touch }: { onResume: () => void; onRestart: () => void; onMenu: () => void; touch: boolean }) {
+export function PauseScreen({
+  onResume,
+  onRestart,
+  onMenu,
+  touch,
+}: {
+  onResume: () => void;
+  onRestart: () => void;
+  onMenu: () => void;
+  touch: boolean;
+}) {
   return (
     <Overlay>
       <div className="flex flex-1 flex-col items-center justify-center px-4">
-        <div className="panel anim-pop w-full max-w-sm rounded-3xl p-6 text-center">
-          <div className="text-[11px] font-bold uppercase tracking-[0.4em] text-cyan-300">All stop</div>
-          <h2 className="title-gradient mt-1 text-5xl font-black uppercase">Paused</h2>
-          <div className="mt-5 flex flex-col gap-2.5">
-            <button type="button" onClick={onResume} className="btn-primary rounded-xl px-6 py-3 text-lg font-black uppercase tracking-widest">
+        <div className="panel anim-pop w-full max-w-sm rounded-lg p-5">
+          <div className="label text-teal">All stop</div>
+          <h2 className="mt-0.5 text-3xl font-semibold uppercase tracking-[0.02em]">Paused</h2>
+          <div className="mt-4 flex flex-col gap-2">
+            <button type="button" onClick={onResume} className="btn-primary rounded-md px-5 py-2.5 text-sm font-bold uppercase tracking-[0.06em] cursor-pointer">
               Resume
             </button>
-            <button type="button" onClick={onRestart} className="btn-ghost rounded-xl px-6 py-2.5 font-bold uppercase tracking-widest">
+            <button type="button" onClick={onRestart} className="btn-ghost rounded-md px-5 py-2.5 text-[12px] font-semibold uppercase tracking-[0.06em] cursor-pointer">
               Restart run
             </button>
-            <button type="button" onClick={onMenu} className="btn-ghost rounded-xl px-6 py-2.5 font-bold uppercase tracking-widest">
-              Main menu
+            <button type="button" onClick={onMenu} className="btn-ghost rounded-md px-5 py-2.5 text-[12px] font-semibold uppercase tracking-[0.06em] cursor-pointer">
+              Harbour office
             </button>
           </div>
           {!touch && (
-            <div className="mt-5 grid grid-cols-3 gap-2 text-[11px] text-cyan-100/70">
-              <div>
-                <div className="mb-1 flex justify-center gap-1">
-                  <Key>Q</Key>
-                  <Key>W</Key>
-                  <Key>E</Key>
-                </div>
-                <div className="flex justify-center gap-1">
-                  <Key>A</Key>
-                  <Key>S</Key>
-                  <Key>D</Key>
-                </div>
+            <div className="mt-4 grid grid-cols-[auto_1fr] gap-3 border-t border-paper/10 pt-3 text-[11px] text-paper-dim">
+              <div className="grid grid-cols-3 gap-1">
+                <Key>Q</Key><Key>W</Key><Key>E</Key>
+                <Key>A</Key><Key>S</Key><Key>D</Key>
               </div>
-              <div className="col-span-2 flex flex-col justify-center text-left">
-                <div>
-                  <b className="text-amber-200">W/S</b> engine · <b className="text-cyan-200">Q/E</b> bow tug
-                </div>
-                <div>
-                  <b className="text-cyan-200">A/D</b> stern tug · <b className="text-cyan-200">←/→</b> both
-                </div>
-                <div className="mt-1 text-cyan-100/50">Esc / P to resume</div>
+              <div className="flex flex-col justify-center gap-0.5">
+                <div><b className="text-paper">W/S</b> engine · <b className="text-paper">Q/E</b> bow tug</div>
+                <div><b className="text-paper">A/D</b> stern tug · <b className="text-paper">Arrow keys</b> both</div>
+                <div className="text-paper-mute">Esc / P resumes</div>
               </div>
             </div>
           )}
@@ -537,11 +458,13 @@ export function PauseScreen({ onResume, onRestart, onMenu, touch }: { onResume: 
 
 /* ───────────────────────── Level clear ───────────────────────── */
 
+const CLEAR_HOLD_MS = LEVEL_CLEAR_HOLD * 1000;
+
 function Row({ label, value, delay, accent }: { label: string; value: string; delay: number; accent?: string }) {
   return (
-    <div className="anim-pop flex items-center justify-between border-b border-cyan-300/10 py-1.5 text-sm" style={{ animationDelay: `${delay}s` }}>
-      <span className="text-cyan-100/80">{label}</span>
-      <span className={cn("font-black tabular-nums", accent ?? "text-white")}>{value}</span>
+    <div className="anim-pop flex items-center justify-between border-b border-paper/[0.08] py-1.5 text-[13px]" style={{ animationDelay: `${delay}s` }}>
+      <span className="text-paper-dim">{label}</span>
+      <span className={cn("num font-semibold", accent ?? "text-paper")}>{value}</span>
     </div>
   );
 }
@@ -552,7 +475,7 @@ export function LevelClearScreen({ data, onContinue }: { data: Breakdown; onCont
   useEffect(() => {
     let raf = 0;
     const tick = () => {
-      const t = (performance.now() - start.current) / 3400;
+      const t = (performance.now() - start.current) / CLEAR_HOLD_MS;
       setProgress(Math.min(1, t));
       if (t < 1) raf = requestAnimationFrame(tick);
     };
@@ -560,39 +483,60 @@ export function LevelClearScreen({ data, onContinue }: { data: Breakdown; onCont
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  const academy = data.levelIndex === 0;
   return (
-    <Overlay dark={false} className="pointer-events-auto" >
-      <button type="button" onClick={onContinue} className="flex flex-1 w-full cursor-pointer flex-col items-center justify-center px-4 text-left md:items-start md:pl-[7vw]" aria-label="Continue">
-        <div className="panel w-full max-w-sm rounded-3xl p-5 sm:p-6">
-          <div className="text-center">
-            <div className="text-[11px] font-bold uppercase tracking-[0.4em] text-emerald-300">
-              {data.levelIndex === 0 ? "Academy Completed" : data.departure ? "Fairway Cleared" : "Lines secured"}
-            </div>
-            <div className="anim-slam text-glow-mint text-5xl font-black uppercase text-emerald-300 sm:text-6xl">
-              {data.levelIndex === 0 ? "Certified!" : data.departure ? "At Sea!" : "Moored!"}
-            </div>
-            <div className="mt-1 text-xs text-cyan-100/70">
-              {data.levelIndex === 0 ? "Pilot Academy Graduation" : data.departure ? `Outbound Run ${data.levelIndex}` : `Berth ${data.levelIndex}`} · {data.levelName}
+    <Overlay dark={false} className="pointer-events-auto">
+      <div className="flex w-full flex-1 items-center justify-center px-4 py-6 md:justify-start md:pl-[7vw]">
+        <div className="panel anim-pop w-full max-w-sm rounded-lg p-4 sm:p-5">
+          <div className="label text-safe">
+            {academy ? "Academy completed" : data.departure ? "Fairway cleared" : "Lines secured"}
+          </div>
+          <div className="text-3xl font-semibold uppercase tracking-[0.02em] text-paper">
+            {academy ? "Certified" : data.departure ? "At sea" : "Moored"}
+          </div>
+          <div className="mt-0.5 text-[11px] text-paper-mute">
+            {academy ? "Pilot academy graduation" : data.departure ? `Outbound contract ${data.levelIndex}` : `Berth ${data.levelIndex}`}
+            {" · "}
+            {data.levelName}
+          </div>
+
+          <div className="mt-3">
+            <Row label={data.departure ? "Departure fee" : "Berthing fee"} value={`+${data.base.toLocaleString()}`} delay={0.1} />
+            <Row label="Time bonus" value={`+${data.timeBonus.toLocaleString()}`} delay={0.16} />
+            <Row
+              label={data.departure ? "Fairway course" : "Precision"}
+              value={`+${data.precision.toLocaleString()}`}
+              delay={0.22}
+              accent={data.precision >= 600 ? "text-teal" : undefined}
+            />
+            <Row
+              label={data.departure ? "Smooth departure" : "Gentle handling"}
+              value={`+${data.gentle.toLocaleString()}`}
+              delay={0.28}
+              accent={data.gentle >= 500 ? "text-teal" : undefined}
+            />
+            {data.perfect > 0 && (
+              <Row label={data.departure ? "Flawless departure" : "Perfect berthing"} value={`+${data.perfect}`} delay={0.34} accent="text-signal" />
+            )}
+            {data.mult > 1 && <Row label={`Streak ×${data.streak}`} value={`×${data.mult}`} delay={0.4} accent="text-signal" />}
+            <div className="anim-pop mt-2 flex items-center justify-between pt-1" style={{ animationDelay: "0.46s" }}>
+              <span className="label text-teal">Total</span>
+              <span className="num text-2xl font-bold text-signal">+{data.total.toLocaleString()}</span>
             </div>
           </div>
-          <div className="mt-4">
-            <Row label={data.departure ? "Departure fee" : "Berthing fee"} value={`+${data.base.toLocaleString()}`} delay={0.25} />
-            <Row label="Time bonus" value={`+${data.timeBonus.toLocaleString()}`} delay={0.4} />
-            <Row label={data.departure ? "Fairway course" : "Precision"} value={`+${data.precision.toLocaleString()}`} delay={0.55} accent={data.precision >= 600 ? "text-cyan-200" : undefined} />
-            <Row label={data.departure ? "Smooth departure" : "Gentle handling"} value={`+${data.gentle.toLocaleString()}`} delay={0.7} accent={data.gentle >= 500 ? "text-cyan-200" : undefined} />
-            {data.perfect > 0 && <Row label={data.departure ? "★ FLAWLESS DEPARTURE" : "★ PERFECT BERTHING"} value={`+${data.perfect}`} delay={0.85} accent="text-amber-300" />}
-            {data.mult > 1 && <Row label={`Streak ×${data.streak}`} value={`×${data.mult}`} delay={0.95} accent="text-amber-300" />}
-            <div className="anim-pop mt-2 flex items-center justify-between pt-1" style={{ animationDelay: "1.05s" }}>
-              <span className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-300">Total</span>
-              <span className="text-glow-amber text-3xl font-black tabular-nums text-amber-300">+{data.total.toLocaleString()}</span>
-            </div>
+
+          <div className="mt-3 h-0.5 w-full overflow-hidden rounded-full bg-paper/10">
+            <div className="h-full bg-teal" style={{ width: `${progress * 100}%` }} />
           </div>
-          <div className="mt-4 h-1 w-full overflow-hidden rounded-full bg-white/10">
-            <div className="h-full bg-cyan-300" style={{ width: `${progress * 100}%` }} />
-          </div>
-          <div className="mt-2 text-center text-[11px] text-cyan-100/60">Next contract incoming · tap or press any key to skip</div>
+          <button
+            type="button"
+            onClick={onContinue}
+            className="btn-ghost mt-2 w-full rounded-md py-2 text-[12px] font-semibold uppercase tracking-[0.06em] cursor-pointer"
+          >
+            Next contract
+          </button>
         </div>
-      </button>
+      </div>
     </Overlay>
   );
 }
@@ -624,101 +568,90 @@ export function GameOverScreen({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (pendingName) {
-      const t = setTimeout(() => inputRef.current?.focus(), 120);
-      return () => clearTimeout(t);
-    }
+    if (!pendingName) return;
+    const t = setTimeout(() => inputRef.current?.focus(), 120);
+    return () => clearTimeout(t);
   }, [pendingName]);
 
   const wrecked = info.reason === "wrecked";
   const tugViolation = info.reason === "tug_open_sea";
+
   return (
     <Overlay>
       <div className="flex w-full flex-1 flex-col items-center justify-center px-4 py-2">
-        <div className="panel anim-pop w-full max-w-md rounded-3xl p-5 sm:p-6">
-          <div className="text-center">
-            <div
-              className={cn(
-                "text-[11px] font-bold uppercase tracking-[0.4em]",
-                wrecked || tugViolation ? "text-red-300" : "text-amber-300",
-              )}
-            >
-              {wrecked ? "Hull breached" : tugViolation ? "Pilot Area Violation" : "Contract expired"}
-            </div>
-            <h2
-              className={cn(
-                "anim-slam text-4xl font-black uppercase leading-none sm:text-5xl",
-                wrecked || tugViolation ? "text-red-300" : "text-amber-300",
-              )}
-            >
-              {wrecked ? "She's going down" : tugViolation ? "Tugs in Open Sea" : "Out of time"}
-            </h2>
-            <div className="mt-1 text-xs text-cyan-100/70">
-              {wrecked
-                ? "Too many hard knocks. The insurers would like a word."
-                : tugViolation
-                ? "Harbour tugs are restricted to harbour pilotage! Dragging attached tugs to open sea revoked your licence."
-                : "The pilot boat went home without you."}
-            </div>
+        <div className="panel anim-pop w-full max-w-md rounded-lg p-4 sm:p-5">
+          <div className="label text-danger">
+            {wrecked ? "Hull breached" : tugViolation ? "Pilotage contract revoked" : "Contract expired"}
           </div>
+          <h2 className="text-2xl font-semibold uppercase tracking-[0.02em] text-paper sm:text-3xl">
+            {wrecked ? "She is going down" : tugViolation ? "Tugs in open water" : "Out of time"}
+          </h2>
+          <p className="mt-1 text-[12px] leading-snug text-paper-dim">
+            {wrecked
+              ? "Too many hard knocks; the hull gave up before the quay did."
+              : tugViolation
+                ? "Harbour tugs are licensed for pilotage only. Dragging them past the pilot limit voided the contract."
+                : "The pilot boat went home without you."}
+          </p>
 
-          <div className="mt-4 text-center">
-            <div className="text-[11px] font-bold uppercase tracking-[0.3em] text-cyan-300">Final score</div>
-            <div className="text-glow-amber text-5xl font-black tabular-nums text-amber-300">{info.score.toLocaleString()}</div>
+          <div className="mt-3 flex items-end justify-between border-y border-paper/10 py-2">
+            <span className="label text-paper-mute">Final score</span>
+            <span className="num text-3xl font-bold text-signal">{info.score.toLocaleString()}</span>
           </div>
 
           <div className="mt-3 grid grid-cols-4 gap-2 text-center">
             {[
-              ["Level", info.level],
-              ["Moored", info.moorings],
-              ["Perfect", info.perfects],
-              ["Knocks", info.bumps],
-            ].map(([l, v]) => (
-              <div key={l as string} className="rounded-lg bg-white/[0.05] px-1 py-1.5">
-                <div className="text-lg font-black text-white">{v as number}</div>
-                <div className="text-[9px] font-bold uppercase tracking-widest text-cyan-200/60">{l as string}</div>
+              ["Level", info.level === 0 ? "—" : String(info.level)],
+              ["Moored", String(info.moorings)],
+              ["Perfect", String(info.perfects)],
+              ["Knocks", String(info.bumps)],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded border border-paper/10 py-1.5">
+                <div className="num text-base font-semibold text-paper">{value}</div>
+                <div className="label text-paper-mute">{label}</div>
               </div>
             ))}
           </div>
 
           {pendingName ? (
             <form
-              className="mt-4 rounded-xl bg-amber-400/10 p-3 ring-1 ring-amber-300/40"
+              className="mt-3 rounded border border-signal/40 bg-signal/10 p-2.5"
               onSubmit={(e) => {
                 e.preventDefault();
                 onSubmitName();
               }}
             >
-              <div className="text-center text-xs font-black uppercase tracking-[0.3em] text-amber-300">★ New harbour record ★</div>
-              <div className="mt-2 flex gap-2">
+              <div className="label text-signal">New harbour record</div>
+              <div className="mt-1.5 flex gap-2">
                 <input
                   ref={inputRef}
                   value={name}
                   onChange={(e) => onNameChange(e.target.value.toUpperCase().slice(0, 12))}
                   onKeyDown={(e) => e.stopPropagation()}
                   maxLength={12}
-                  placeholder="PILOT NAME"
-                  className="min-w-0 flex-1 rounded-lg border border-cyan-300/30 bg-black/40 px-3 py-2 font-bold uppercase tracking-widest text-white outline-none focus:border-amber-300"
+                  placeholder="CALLSIGN"
+                  aria-label="Callsign for the harbour log"
+                  className="min-w-0 flex-1 rounded border border-paper/20 bg-ink-900/70 px-2.5 py-1.5 text-[13px] font-semibold uppercase tracking-[0.08em] text-paper outline-none placeholder:text-paper-mute"
                   autoComplete="off"
                   autoCapitalize="characters"
                 />
-                <button type="submit" className="btn-primary rounded-lg px-4 py-2 text-sm font-black uppercase tracking-widest">
+                <button type="submit" className="btn-primary rounded px-3 py-1.5 text-[12px] font-bold uppercase tracking-[0.06em] cursor-pointer">
                   Log it
                 </button>
               </div>
             </form>
           ) : (
-            <div className="mt-4 max-h-44 overflow-y-auto no-scrollbar">
+            <div className="mt-3 max-h-40 overflow-y-auto no-scrollbar">
               <HighScoreTable scores={scores} highlight={highlight} />
             </div>
           )}
 
-          <div className="mt-4 flex gap-2">
-            <button type="button" onClick={onRestart} className="btn-primary flex-1 rounded-xl px-4 py-3 text-lg font-black uppercase tracking-widest">
-              Restart {!touch && <span className="text-sm opacity-70">(R)</span>}
+          <div className="mt-3 flex gap-2">
+            <button type="button" onClick={onRestart} className="btn-primary flex-1 rounded-md px-4 py-2.5 text-sm font-bold uppercase tracking-[0.06em] cursor-pointer">
+              Restart{!touch && <span className="ml-1 font-medium opacity-60">R</span>}
             </button>
-            <button type="button" onClick={onMenu} className="btn-ghost rounded-xl px-4 py-3 font-bold uppercase tracking-widest">
-              Menu
+            <button type="button" onClick={onMenu} className="btn-ghost rounded-md px-4 py-2.5 text-[12px] font-semibold uppercase tracking-[0.06em] cursor-pointer">
+              Harbour office
             </button>
           </div>
         </div>

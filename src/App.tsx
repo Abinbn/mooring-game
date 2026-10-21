@@ -22,6 +22,7 @@ export default function App() {
   const [name, setName] = useState("");
   const [muted, setMuted] = useState(false);
   const [touch, setTouch] = useState(() => (typeof window !== "undefined" ? window.matchMedia("(pointer: coarse)").matches : false));
+  const [fatal, setFatal] = useState<string | null>(null);
 
   // refs mirroring state for the global key handler
   const phaseRef = useRef<Phase>("menu");
@@ -60,32 +61,47 @@ export default function App() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const game = new Game(canvas, {
-      onPhase: (p, payload) => {
-        setPhase(p);
-        if (p === "levelClear" && payload) setBreakdown(payload as Breakdown);
-        if (p === "gameover" && payload) {
-          const info = payload as GameOverInfo;
-          setGameOver(info);
-          const q = qualifies(info.score);
-          setPendingName(q);
-          pendingRef.current = q;
-          setHighlight(-1);
-          if (q) setName(getLastName() || "");
-          setScores(loadScores());
-          setSavedRun(null);
-        }
-        if (p === "menu") {
-          setScores(loadScores());
-          setSavedRun(loadSavedRun());
-        }
-      },
-      onHud: (h) => setHud(h),
-    });
+
+    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let game: Game;
+    try {
+      game = new Game(canvas, {
+        onPhase: (p, payload) => {
+          setPhase(p);
+          if (p === "levelClear" && payload) setBreakdown(payload as Breakdown);
+          if (p === "gameover" && payload) {
+            const info = payload as GameOverInfo;
+            setGameOver(info);
+            const q = qualifies(info.score);
+            setPendingName(q);
+            pendingRef.current = q;
+            setHighlight(-1);
+            if (q) setName(getLastName() || "");
+            setScores(loadScores());
+            setSavedRun(null);
+          }
+          if (p === "menu") {
+            setScores(loadScores());
+            setSavedRun(loadSavedRun());
+          }
+        },
+        onHud: (h) => setHud(h),
+      });
+    } catch (err) {
+      console.error("Could not start the renderer", err);
+      setFatal("This browser could not start the 2D renderer. WebGL is not required, but canvas 2D must be enabled.");
+      return;
+    }
+
     gameRef.current = game;
-    (window as unknown as { __dsa?: Game }).__dsa = game;
+    const dev = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV;
+    if (dev) (window as unknown as { __dsa?: Game }).__dsa = game;
     setMuted(game.audio.muted);
     game.setTouchMode(touch);
+    game.setReducedMotion(motionQuery.matches);
+
+    const onMotionChange = () => game.setReducedMotion(motionQuery.matches);
+    motionQuery.addEventListener("change", onMotionChange);
 
     const ro = new ResizeObserver(() => game.resize());
     if (wrapRef.current) ro.observe(wrapRef.current);
@@ -95,6 +111,7 @@ export default function App() {
 
     return () => {
       ro.disconnect();
+      motionQuery.removeEventListener("change", onMotionChange);
       window.removeEventListener("resize", onResize);
       window.removeEventListener("orientationchange", onResize);
       game.destroy();
@@ -116,6 +133,13 @@ export default function App() {
   useEffect(() => {
     gameRef.current?.setTouchMode(touch);
   }, [touch]);
+
+  // The HUD and the touch pad mount/unmount with the phase, so re-measure the
+  // free play area once React has committed the new chrome.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => gameRef.current?.refreshUiInsets());
+    return () => cancelAnimationFrame(id);
+  }, [phase, touch]);
 
   const onHorn = useCallback(() => gameRef.current?.soundHorn(), []);
   const onToggleTugs = useCallback(() => gameRef.current?.toggleTugs(), []);
@@ -187,8 +211,20 @@ export default function App() {
   const showHud = hud && (phase === "playing" || phase === "paused" || phase === "levelClear");
   const showTouch = touch && phase === "playing";
 
+  if (fatal) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-ink-900 p-6 font-display" style={{ height: "100dvh" }}>
+        <div className="panel max-w-sm rounded-lg p-5 text-center">
+          <div className="label text-danger">Renderer unavailable</div>
+          <h1 className="mt-1 text-xl font-semibold text-paper">The harbour will not load</h1>
+          <p className="mt-2 text-[13px] leading-snug text-paper-dim">{fatal}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div ref={wrapRef} className="relative h-screen w-full overflow-hidden bg-[#06202b]" style={{ height: "100dvh" }}>
+    <div ref={wrapRef} className="relative h-screen w-full overflow-hidden bg-ink-900" style={{ height: "100dvh" }}>
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
 
       {showHud && (
