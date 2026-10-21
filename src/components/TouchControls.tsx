@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Action, HudData, TugAttachmentState } from "@/game/Game";
 import { cn } from "@/utils/cn";
 
@@ -27,6 +27,13 @@ function TouchButton({
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const active = useRef(false);
+  // Keep the latest handler in a ref: the unmount cleanup below must not fire
+  // just because the parent re-created the callback (linked mode does that on
+  // every HUD tick, which would release a held button immediately).
+  const onInputRef = useRef(onInput);
+  useEffect(() => {
+    onInputRef.current = onInput;
+  }, [onInput]);
 
   const press = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -43,6 +50,17 @@ function TouchButton({
       onInput(action, true);
     },
     [action, onInput, disabled],
+  );
+
+  // If the button disappears while held (pause, level clear, tug mode change)
+  // release the action so the ship does not keep its engine/tug command.
+  useEffect(
+    () => () => {
+      if (!active.current) return;
+      active.current = false;
+      onInputRef.current(action, false);
+    },
+    [action],
   );
 
   const release = useCallback(
@@ -132,11 +150,16 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
   const tugState: TugAttachmentState = hud.tugState;
   const tugAttached = tugState === "attached";
 
+  // Casting the tugs off must not leave the pad stuck in "linked" mode.
+  useEffect(() => {
+    if (!tugAttached) setLinked(false);
+  }, [tugAttached]);
+
   // Without tugs: rudder-only steering (sternLeft/Right = rudder)
   // With tugs: 4-button tug control OR linked push/pull
   return (
     <div
-      className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between px-3 pb-3 font-display"
+      className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between px-2 pb-3 font-display sm:px-3"
       style={{ paddingBottom: "calc(12px + env(safe-area-inset-bottom))" }}
     >
       {/* ── Left: steering group ───────────────────────────────── */}
@@ -153,14 +176,14 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
                 onInput={onInput}
                 icon="◀"
                 label="Port"
-                className="h-[72px] w-[78px]"
+                className="h-[68px] w-[70px] sm:h-[72px] sm:w-[78px]"
               />
               <TouchButton
                 action="sternRight"
                 onInput={onInput}
                 icon="▶"
                 label="Stbd"
-                className="h-[72px] w-[78px]"
+                className="h-[68px] w-[70px] sm:h-[72px] sm:w-[78px]"
               />
             </div>
           </>
@@ -173,23 +196,23 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
             <div className="flex gap-2">
               <TouchButton
                 action="bowLeft"
-                onInput={(a, d) => {
+                onInput={(_, d) => {
                   onInput("bowLeft", d);
                   onInput("sternLeft", d);
                 }}
                 icon="⬅"
                 label="Push"
-                className="h-[72px] w-[78px]"
+                className="h-[68px] w-[70px] sm:h-[72px] sm:w-[78px]"
               />
               <TouchButton
                 action="bowRight"
-                onInput={(a, d) => {
+                onInput={(_, d) => {
                   onInput("bowRight", d);
                   onInput("sternRight", d);
                 }}
                 icon="➡"
                 label="Pull"
-                className="h-[72px] w-[78px]"
+                className="h-[68px] w-[70px] sm:h-[72px] sm:w-[78px]"
               />
             </div>
           </>
@@ -200,10 +223,10 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
               Tugs
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <TouchButton action="bowLeft" onInput={onInput} icon="◀" label="Bow" className="h-[60px] w-[68px]" />
-              <TouchButton action="bowRight" onInput={onInput} icon="▶" label="Bow" className="h-[60px] w-[68px]" />
-              <TouchButton action="sternLeft" onInput={onInput} icon="◀" label="Stern" className="h-[60px] w-[68px]" />
-              <TouchButton action="sternRight" onInput={onInput} icon="▶" label="Stern" className="h-[60px] w-[68px]" />
+              <TouchButton action="bowLeft" onInput={onInput} icon="◀" label="Bow" className="h-[56px] w-[64px] sm:h-[60px] sm:w-[68px]" />
+              <TouchButton action="bowRight" onInput={onInput} icon="▶" label="Bow" className="h-[56px] w-[64px] sm:h-[60px] sm:w-[68px]" />
+              <TouchButton action="sternLeft" onInput={onInput} icon="◀" label="Stern" className="h-[56px] w-[64px] sm:h-[60px] sm:w-[68px]" />
+              <TouchButton action="sternRight" onInput={onInput} icon="▶" label="Stern" className="h-[56px] w-[64px] sm:h-[60px] sm:w-[68px]" />
             </div>
           </>
         )}
@@ -241,6 +264,7 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
             }}
             onContextMenu={(e) => e.preventDefault()}
             aria-label="Link tugs"
+            aria-pressed={linked}
           >
             <span className="text-base leading-none">{linked ? "🔗" : "🔓"}</span>
             <span className="text-[8px] uppercase tracking-widest opacity-80">
@@ -262,9 +286,9 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
         <div className="text-center text-[10px] font-extrabold uppercase tracking-[0.3em] text-amber-200/80">
           Engine
         </div>
-        <TouchButton action="ahead" onInput={onInput} icon="▲" label="Ahead" className="engine h-[72px] w-[88px]" />
+        <TouchButton action="ahead" onInput={onInput} icon="▲" label="Ahead" className="engine h-[68px] w-[80px] sm:h-[72px] sm:w-[88px]" />
         <SpeedBadge speed={hud.speed} />
-        <TouchButton action="astern" onInput={onInput} icon="▼" label="Astern" className="engine h-[72px] w-[88px]" />
+        <TouchButton action="astern" onInput={onInput} icon="▼" label="Astern" className="engine h-[68px] w-[80px] sm:h-[72px] sm:w-[88px]" />
       </div>
     </div>
   );

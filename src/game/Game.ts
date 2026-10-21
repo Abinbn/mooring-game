@@ -39,7 +39,6 @@ import {
   type DepartureExit,
   type LevelDef,
   type MissionType,
-  type PilotBoundary,
   type ShipVisual,
 } from "./levels";
 import {
@@ -494,6 +493,8 @@ export class Game {
     if (this.phase !== "playing") return;
     this.persistCurrentRun();
     this.audio.silenceLoops();
+    this.keys.clear();
+    this.recomputeInput();
     this.setPhase("paused");
   }
 
@@ -1324,7 +1325,9 @@ export class Game {
       },
       {
         title: "TUG RENDEZVOUS & ATTACH",
-        instruction: "Approach the pilot station and press [T] to summon and attach standby tugboats.",
+        instruction: touch
+          ? "Approach the pilot station, then tap the ⚓ button to summon and attach the standby tugboats."
+          : "Approach the pilot station and press [T] to summon and attach standby tugboats.",
         keyHint: touch ? "⚓ TUGS" : "[T] or ⚓",
       },
       {
@@ -1514,6 +1517,7 @@ export class Game {
       total: 5500,
     };
     this.score += 5500;
+    this.levelClearTimer = 3.4;
     this.keys.clear();
     this.recomputeInput();
     this.audio.silenceLoops();
