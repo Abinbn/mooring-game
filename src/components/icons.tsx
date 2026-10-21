@@ -23,6 +23,18 @@ const PATHS = {
       <path d="M19.7 6.8a7.4 7.4 0 0 1 0 10.4" />
     </>
   ),
+  /**
+   * A ship's whistle on its mast — deliberately not another speaker, so the
+   * horn button cannot be mistaken for the sound toggle.
+   */
+  shipHorn: (
+    <>
+      <path d="M8.2 5.2h7.6l-1.2 4.3H9.4L8.2 5.2Z" />
+      <path d="M9.6 9.5h4.8v3.2H9.6z" />
+      <path d="M12 12.7v5.5" />
+      <path d="M8.6 18.8h6.8" />
+    </>
+  ),
   link: (
     <>
       <path d="M10.2 13.8a3.6 3.6 0 0 0 5.1 0l2.4-2.4a3.6 3.6 0 0 0-5.1-5.1l-1.2 1.2" />

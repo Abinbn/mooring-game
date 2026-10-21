@@ -11,11 +11,17 @@ export const QUAY_X = 0; // quay face is the vertical line x = 0; water is x < 0
 
 // Propulsion (accelerations, mass normalised to 1)
 export const ENGINE_AHEAD = 15;
-export const ENGINE_ASTERN = 9.5;
+// Astern is a third of ahead: a loaded ship backs down slowly and noisily.
+export const ENGINE_ASTERN = 5;
 export const TUG_FORCE = 5.6;
+
+// Backing down is limited to a third of the ship's ahead speed, whatever the
+// engine does. A loaded ship has one third of the thrust astern.
+export const ASTERN_SPEED_LIMIT = 22;
 // A tug pushing broadside mostly translates the ship; only part of that force
-// becomes yaw, otherwise a 200 m hull pivots like a speedboat.
-export const TUG_TORQUE_SCALE = 0.3;
+// becomes yaw. The tugs are the reason a 200 m hull can be swung at all — the
+// ship's own rudder is deliberately feeble — so this is generous.
+export const TUG_TORQUE_SCALE = 1.8;
 
 // Response rates (1/s)
 export const ENGINE_RAMP = 2.6;
@@ -32,13 +38,16 @@ export const C_ANG = 0.6;
 export const INERTIA = 1500;
 
 // Rate limits: yaw (rad/s) and how hard the rudder can bite at speed.
-export const MAX_ANGVEL = 0.075; // ≈ 4.3 °/s
+// The rudder alone will take a couple of minutes to come round; hawser work
+// from two tugs is what actually swings her (≈22 °/s).
+export const MAX_ANGVEL = 0.075; // ≈ 4.3 °/s on the rudder alone
+export const MAX_ANGVEL_TUGS = 0.38; // ≈ 21.8 °/s with both tugs working
 export const RUDDER_LIFT = 0.5;
 export const RUDDER_DRAG = 0.1;
 
 // Free-sailing tugboats (standby, repositioning, coming alongside)
 export const TUG_ACCEL = 30; // units/s² — tugs build way from rest, not snap to speed
-export const TUG_MAX_SPEED = 92; // units/s — enough to overhaul a ship still making way
+export const TUG_MAX_SPEED = 96; // units/s — enough to overhaul a ship still making way
 export const TUG_COLLIDE_R = 7.5; // half-width used for hull contacts
 
 // Collision

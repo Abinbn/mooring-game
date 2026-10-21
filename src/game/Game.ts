@@ -27,7 +27,9 @@ import {
   SECURE_TIME,
   SHIP_L,
   SHIP_W,
+  ASTERN_SPEED_LIMIT,
   MAX_ANGVEL,
+  MAX_ANGVEL_TUGS,
   RUDDER_DRAG,
   RUDDER_LIFT,
   TUG_ACCEL,
@@ -94,8 +96,8 @@ export type TugAttachmentState = "standby" | "approaching" | "attached";
 export const LEVEL_CLEAR_HOLD = 6;
 /** Level time limits above this mean "no clock". */
 const UNLIMITED_TIME = 9000;
-/** Safety valve: the run is attached even if the tugs cannot reach the hull. */
-const TUG_APPROACH_TIMEOUT = 24;
+/** Deadline for the approach: make fast if they are alongside, stand them down if not. */
+const TUG_APPROACH_TIMEOUT = 40;
 
 export interface TutorialInfo {
   step: number;
@@ -153,7 +155,10 @@ export interface HudData {
   introTip: string;
   current: Vec;
   telegraph: string;
+  /** Speed through the water, unsigned (world units/s). */
   speed: number;
+  /** Signed along the keel: negative when she is backing down. */
+  forwardSpeed: number;
   muted: boolean;
   tutorial?: TutorialInfo;
   rudder: number;
@@ -177,13 +182,13 @@ interface Tug {
   avoid: Vec;
   bumpCd: number;
   side: 1 | -1;
-  pendingSide: 1 | -1;
   cmd: number;
   effort: number;
   localPos: Vec;
   localAngle: number;
   phase: number;
-  waypoint: Vec | null;
+  /** Latched approach stage: 0 open out, 1 run along the line, 2 haul in. */
+  stage: number;
   emitAcc: number;
   worldPos: Vec;
   worldAngle: number;
@@ -288,6 +293,7 @@ export class Game {
   private tugBreachTimer = 0;
 
   // Tutorial state
+  private commanded = false;
   private tutorialStep = 0;
   private tutorialStepTimer = 0;
   private tutorialStepCompleted = false;
@@ -453,6 +459,7 @@ export class Game {
 
   toggleTugs() {
     if (this.phase !== "playing") return;
+    this.noteCommand();
     this.audio.ensure();
 
     if (this.tugState === "attached") {
@@ -460,6 +467,7 @@ export class Game {
       for (const t of this.tugs) {
         t.effort = 0;
         t.cmd = 0;
+        t.stage = 0;
       }
       this.audio.splash();
       this.audio.tugToot(35);
@@ -473,23 +481,14 @@ export class Game {
       ) {
         this.tugState = "approaching";
         this.tugAttachTimer = TUG_APPROACH_TIMEOUT;
-        // Tugs make fast to whichever flank they are already on: crossing the
-        // bows to reach "their" side wastes half the approach and invites a
-        // scrape along the topsides.
-        const ch = Math.cos(this.heading);
-        const sh = Math.sin(this.heading);
+        // Both tugs work the seaward flank. The side is decided once, here, and
+        // then never changes: a tug that swaps sides mid-run reads as teleporting.
+        const side: 1 | -1 = Math.sin(this.heading) >= 0 ? 1 : -1;
         for (const t of this.tugs) {
-          const dx = t.worldPos.x - this.pos.x;
-          const dy = t.worldPos.y - this.pos.y;
-          const ly = -dx * sh + dy * ch;
-          if (Math.abs(ly) > 6) {
-            const over: 1 | -1 = ly > 0 ? 1 : -1;
-            if (over !== t.side) {
-              t.side = over;
-              t.pendingSide = over;
-              t.localPos = { x: t.anchorX, y: over * (SHIP_W / 2 + TUG_W / 2 + 3) };
-            }
-          }
+          t.side = side;
+          t.localPos = { x: t.anchorX, y: side * (SHIP_W / 2 + TUG_W / 2 + 3) };
+          t.localAngle = 0;
+          t.stage = 0;
         }
         this.audio.tugToot(0);
         this.addText(this.pos.x, this.pos.y - SHIP_W - 22, "TUGS STEAMING TO ATTACH", "#57b98a", 20);
@@ -505,6 +504,7 @@ export class Game {
 
   soundHorn() {
     if (this.phase !== "playing") return;
+    this.noteCommand();
     this.audio.ensure();
     this.audio.shipHorn();
 
@@ -590,7 +590,7 @@ export class Game {
 
   toMenu() {
     this.persistCurrentRun();
-    this.audio.silenceLoops();
+    this.audio.suspend();
     this.loadLevel(1, true);
     this.setPhase("menu");
   }
@@ -598,7 +598,7 @@ export class Game {
   pause() {
     if (this.phase !== "playing") return;
     this.persistCurrentRun();
-    this.audio.silenceLoops();
+    this.audio.suspend();
     this.keys.clear();
     this.recomputeInput();
     this.setPhase("paused");
@@ -606,7 +606,7 @@ export class Game {
 
   resume() {
     if (this.phase !== "paused") return;
-    this.audio.ensure();
+    this.audio.resume();
     this.last = performance.now();
     this.setPhase("playing");
     this.persistCurrentRun();
@@ -675,6 +675,7 @@ export class Game {
       current: this.currentAt(this.time),
       telegraph,
       speed: spd,
+      forwardSpeed: u,
       muted: this.audio.muted,
       tutorial: this.getTutorialInfo(),
       rudder: this.rudder,
@@ -710,6 +711,7 @@ export class Game {
     this.rudderTarget = 0;
     this.timeLeft = lv.timeLimit;
     this.introTimer = attract ? 0 : 2.6;
+    this.commanded = false;
     this.secure = 0;
     this.secureTick = 0;
     this.levelClearTimer = 0;
@@ -758,13 +760,12 @@ export class Game {
         avoid: { x: 0, y: 0 },
         bumpCd: 0,
         side,
-        pendingSide: side,
         cmd: 0,
         effort: 0,
         localPos,
         localAngle: 0,
         phase: Math.random() * 6.28,
-        waypoint: null,
+        stage: 0,
         emitAcc: 0,
         standbyPos,
         worldPos: this.tugState === "standby" ? { ...standbyPos } : { x: 0, y: 0 },
@@ -813,6 +814,9 @@ export class Game {
     }
     if (KEYMAP[e.code]) {
       e.preventDefault();
+      // Outside play the helm keys do nothing: otherwise a key held over a
+      // pause would still be down when the game resumes.
+      if (this.phase !== "playing") return;
       if (!this.keys.has(e.code)) {
         this.keys.add(e.code);
         this.recomputeInput();
@@ -823,6 +827,9 @@ export class Game {
     if (e.code === "Space") e.preventDefault();
     if ((e.code === "KeyP" || e.code === "Escape") && (this.phase === "playing" || this.phase === "paused")) {
       e.preventDefault();
+      // Key repeat must not toggle twice: that is what made the pause panel
+      // flash back and forth while a key was held.
+      if (e.repeat) return;
       this.togglePause();
     }
   };
@@ -916,8 +923,12 @@ export class Game {
         this.wreckTimer -= dt;
         if (this.wreckTimer <= 0) this.gameOver("wrecked");
       } else if (this.introTimer > 0) {
-        this.introTimer -= dt;
-        if (this.anyInput()) this.introTimer = Math.min(this.introTimer, 0.6);
+        // The briefing card and the clock both wait for the first command.
+        // Nothing is counting down while the player is still reading.
+        if (this.anyInput()) {
+          this.introTimer = Math.min(this.introTimer, 0.5);
+          this.introTimer -= dt;
+        }
       } else {
         this.timeLeft -= dt;
         const s = Math.ceil(this.timeLeft);
@@ -942,7 +953,41 @@ export class Game {
       this.tugAttachTimer -= dt;
       if (this.tugAttachTimer <= 0) {
         this.tugAttachTimer = 0;
+        // Time is up: if they are alongside, make fast; if they are still
+        // somewhere out in the basin, send them back rather than teleporting
+        // two tugs through the harbour.
+        const ch0 = Math.cos(this.heading);
+        const sh0 = Math.sin(this.heading);
+        const far = this.tugs.some((t) => {
+          const dx = t.worldPos.x - this.pos.x;
+          const dy = t.worldPos.y - this.pos.y;
+          const lx = dx * ch0 + dy * sh0;
+          const ly = -dx * sh0 + dy * ch0;
+          return Math.hypot(lx - t.anchorX, ly - t.side * (SHIP_W / 2 + TUG_W / 2 + 3)) > 45;
+        });
+        if (far) {
+          this.tugState = "standby";
+          for (const t of this.tugs) {
+            t.stage = 0;
+            t.effort = 0;
+            t.cmd = 0;
+          }
+          this.addText(this.pos.x, this.pos.y - SHIP_W - 22, "TUGS CANNOT MAKE FAST — STANDING BY", "#d9564a", 16);
+          this.audio.bump();
+          return;
+        }
         this.tugState = "attached";
+        // Hand over from free sailing to hull-relative motion without a snap:
+        // the tugs stay exactly where they finished their approach.
+        const ch = Math.cos(this.heading);
+        const sh = Math.sin(this.heading);
+        for (const t of this.tugs) {
+          const dx = t.worldPos.x - this.pos.x;
+          const dy = t.worldPos.y - this.pos.y;
+          t.localPos = { x: dx * ch + dy * sh, y: -dx * sh + dy * ch };
+          t.localAngle = t.worldAngle - this.heading;
+          t.vel = { x: 0, y: 0 };
+        }
         this.addText(this.pos.x, this.pos.y - SHIP_W - 22, "TUGS SECURED & READY", "#57b98a", 20);
         this.audio.bump();
       }
@@ -1021,6 +1066,14 @@ export class Game {
       }
     }
 
+    // Astern is a third of ahead: hold her to the backing limit, softly, so the
+    // telegraph still answers but the wake never matches a full-ahead run.
+    if (u < -ASTERN_SPEED_LIMIT) {
+      const excess = -u - ASTERN_SPEED_LIMIT;
+      fx += fwd.x * excess * 6;
+      fy += fwd.y * excess * 6;
+    }
+
     const dLong = -(K_LONG * u + C_LONG * u * Math.abs(u));
     const dLat = -(K_LAT * v + C_LAT * v * Math.abs(v));
     fx += fwd.x * dLong + right.x * dLat;
@@ -1036,7 +1089,9 @@ export class Game {
 
     this.vel.x += fx * dt;
     this.vel.y += fy * dt;
-    this.angVel = clamp(this.angVel + (torque / INERTIA) * dt, -MAX_ANGVEL, MAX_ANGVEL);
+    // The rudder alone can barely walk her round; two tugs on a hawser can.
+    const yawCap = this.tugState === "attached" ? MAX_ANGVEL_TUGS : MAX_ANGVEL;
+    this.angVel = clamp(this.angVel + (torque / INERTIA) * dt, -yawCap, yawCap);
     this.pos.x += this.vel.x * dt;
     this.pos.y += this.vel.y * dt;
     this.heading += this.angVel * dt;
@@ -1099,7 +1154,12 @@ export class Game {
   }
 
   private anyInput() {
-    return ACTIONS.some((a) => this.input[a]);
+    return ACTIONS.some((a) => this.input[a]) || this.commanded;
+  }
+
+  /** Marks the first deliberate command of a level (helm, tugs or horn). */
+  private noteCommand() {
+    this.commanded = true;
   }
 
   // ───────────────────────── Collisions ─────────────────────────
@@ -1766,19 +1826,22 @@ export class Game {
     const s = Math.sin(this.heading);
 
     if (this.tugState === "standby") {
+      // Idle tugs hold their berth: no bobbing about, no hunting for a heading.
+      // Only an actual shove from the hull moves them off station.
       for (const t of this.tugs) {
-        const bobX = Math.sin(this.time * 1.5 + t.phase) * 1.4;
-        const bobY = Math.cos(this.time * 1.2 + t.phase) * 1.4;
-        this.sailTug(t, { x: t.standbyPos.x + bobX + t.avoid.x, y: t.standbyPos.y + bobY + t.avoid.y }, dt);
-        this.emitTugWake(t, dt, 26);
+        this.sailTug(t, { x: t.standbyPos.x + t.avoid.x, y: t.standbyPos.y + t.avoid.y }, dt);
         this.separateTugFromHull(t, dt);
       }
       return;
     }
 
     if (this.tugState === "approaching") {
-      // The tugs actually steam over: accelerate from rest, run at tug speed,
-      // and ease down alongside. Attachment happens when they arrive.
+      // The tugs actually steam over: accelerate from rest, run at tug speed and
+      // ease down alongside. Attachment happens when they arrive.
+      //
+      // The approach is flown in three stages, the way a tug would do it: get
+      // clear of the hull, run along a line ~50 u off her topsides, then haul in
+      // to the slot. Nothing ever aims across the hull.
       let arrived = true;
       for (const t of this.tugs) {
         const attach = { x: t.anchorX, y: t.side * (SHIP_W / 2 + TUG_W / 2 + 3) };
@@ -1787,23 +1850,71 @@ export class Game {
           y: this.pos.y + attach.x * s + attach.y * c,
         };
 
-        // A tug on the wrong side of the hull runs past the nearer end first
-        // instead of grinding against the topsides.
+        // Where the tug is, in the ship's own frame.
         const relX = t.worldPos.x - this.pos.x;
         const relY = t.worldPos.y - this.pos.y;
         const localX = relX * c + relY * s;
         const localY = -relX * s + relY * c;
-        let aim = attachPos;
-        const wrongSide = localY * t.side < -4 && Math.abs(localX) < SHIP_L / 2 + 8;
-        if (wrongSide) {
+
+        // Runway: a line ~40 u off her topsides. The stages latch forward, so a
+        // tug never flips between "open out" and "haul in" and parks on the seam.
+        const runwayY = attach.y + t.side * 40;
+        const clearOfHull = (localY - runwayY) * t.side >= -1;
+        const abeam = Math.abs(localX - attach.x) <= 24;
+
+        // A tug on the wrong side of her, with the hull between it and the slot,
+        // rounds the nearer end instead of steaming through the topsides.
+        const shipWay = Math.hypot(this.vel.x, this.vel.y);
+        if (shipWay < 18 && localY * t.side < -3 && Math.abs(localX) < SHIP_L / 2 + 12) {
           const end = localX >= 0 ? 1 : -1;
-          const cornerX = end * (SHIP_L / 2 + 30);
-          const cornerY = t.side * 14;
-          aim = {
-            x: this.pos.x + cornerX * c - cornerY * s,
-            y: this.pos.y + cornerX * s + cornerY * c,
+          t.stage = 0;
+          const corner = {
+            x: this.pos.x + end * (SHIP_L / 2 + 34) * c - t.side * 40 * s,
+            y: this.pos.y + end * (SHIP_L / 2 + 34) * s + t.side * 40 * c,
           };
+          const slotVelC = {
+            x: this.vel.x - this.angVel * (attachPos.y - this.pos.y),
+            y: this.vel.y + this.angVel * (attachPos.x - this.pos.x),
+          };
+          this.sailTug(t, corner, dt, slotVelC);
+          this.emitTugWake(t, dt, 45);
+          this.separateTugFromHull(t, dt);
+          arrived = false;
+          continue;
         }
+
+        if (t.stage === 2) {
+          // Committed to the final haul: only give it up if she has drifted
+          // right across the hull, otherwise she would yo-yo on the seam.
+          if (localY * t.side <= 2) t.stage = 0;
+        } else if (!clearOfHull) {
+          t.stage = 0;
+        } else {
+          if (t.stage === 0) t.stage = 1;
+          if (abeam) t.stage = 2;
+        }
+
+        const slotDist = Math.hypot(localX - attach.x, localY - attach.y);
+        // Closing fast? Run alongside at a safe distance and only haul in once
+        // the speeds are matched — otherwise she would scrape down the topsides.
+        const relSpeed = Math.hypot(t.vel.x - this.vel.x, t.vel.y - this.vel.y);
+        const standoff = clamp((relSpeed - 8) * 0.9, 0, 34);
+        const aimLocal: Vec =
+          slotDist > 70
+            ? // Far off: steer for the slot, keeping her distance while fast.
+              { x: attach.x, y: attach.y + t.side * standoff }
+            : t.stage === 0
+            ? // Open out towards the runway, already angling towards the slot:
+              // a real tug cuts the corner instead of steaming a dog-leg.
+              { x: localX + (attach.x - localX) * 0.55, y: runwayY }
+            : t.stage === 1
+              ? { x: attach.x, y: runwayY } // run along the line until abeam
+              : { x: attach.x, y: attach.y }; // haul in alongside
+
+        const aim = {
+          x: this.pos.x + aimLocal.x * c - aimLocal.y * s,
+          y: this.pos.y + aimLocal.x * s + aimLocal.y * c,
+        };
 
         // Velocity of the slot we are making for, including the ship's yaw.
         const slotVel = {
@@ -1814,33 +1925,19 @@ export class Game {
         this.emitTugWake(t, dt, 45);
         this.separateTugFromHull(t, dt);
 
-        // Close enough alongside to hand the line across — judged in the ship's
-        // own frame, so a tug overhauling a ship still making way still counts.
         const gapLocal = Math.hypot(localX - attach.x, localY - attach.y);
-        if (wrongSide || gapLocal > 26) arrived = false;
+        if (gapLocal > 9) arrived = false;
       }
       if (arrived) this.tugAttachTimer = 0;
       return;
     }
 
-    const desired: 1 | -1 = s > 0.35 ? 1 : s < -0.35 ? -1 : this.tugs[0].side;
     for (const t of this.tugs) {
-      if (desired !== t.side && !t.waypoint && this.phase !== "levelClear") {
-        t.waypoint = { x: Math.sign(t.anchorX) * (SHIP_L / 2 + 24), y: 0 };
-        t.pendingSide = desired;
-      }
       let targetPos: Vec;
       let targetAngle: number;
       const e = t.effort;
       const absE = Math.abs(e);
-      if (t.waypoint) {
-        targetPos = t.waypoint;
-        targetAngle = 0;
-        if (Math.hypot(t.localPos.x - t.waypoint.x, t.localPos.y - t.waypoint.y) < 6) {
-          t.side = t.pendingSide;
-          t.waypoint = null;
-        }
-      } else if (absE < 0.08) {
+      if (absE < 0.08) {
         targetPos = { x: t.anchorX, y: t.side * (SHIP_W / 2 + TUG_W / 2 + 3) };
         targetAngle = 0;
       } else if (e * t.side < 0) {
@@ -1921,8 +2018,13 @@ export class Game {
 
     const spd = Math.hypot(t.vel.x, t.vel.y);
     if (spd > 1.2) {
+      // Lie to the course she is making.
       t.worldAngle = dampAngle(t.worldAngle, Math.atan2(t.vel.y, t.vel.x), 3.2, dt);
+    } else if (this.tugState === "standby") {
+      // Idle at the berth: hold a fixed heading. No hunting, no swinging.
+      t.worldAngle = dampAngle(t.worldAngle, Math.PI, 2.2, dt);
     } else {
+      // Alongside with no way on: nod gently with the swell.
       t.worldAngle = dampAngle(t.worldAngle, Math.PI + Math.sin(this.time * 1.6 + t.phase) * 0.06, 2.2, dt);
     }
   }
@@ -2195,7 +2297,7 @@ export class Game {
       const c = Math.cos(this.heading);
       const s = Math.sin(this.heading);
       for (const tg of this.tugs) {
-        if (tg.effort * tg.side > 0.08 && !tg.waypoint) {
+        if (tg.effort * tg.side > 0.08) {
           const hx = tg.anchorX;
           const hy = tg.side * (SHIP_W / 2);
           const a = { x: this.pos.x + hx * c - hy * s, y: this.pos.y + hx * s + hy * c };

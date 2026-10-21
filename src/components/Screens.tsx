@@ -349,22 +349,22 @@ export function StartScreen({
                 <ul className="mt-4 space-y-2.5 text-[13px] text-paper-dim">
                   <li className="flex items-start gap-3">
                     <span className="flex shrink-0 gap-1">{touch ? <Key wide><Icon name="chevronUp" className="h-3.5 w-3.5" /><Icon name="chevronDown" className="h-3.5 w-3.5" /></Key> : <><Key>W</Key><Key>S</Key></>}</span>
-                    <span><b className="font-semibold text-paper">Engine</b> ahead and astern. A loaded ship carries her momentum for a long way — brake early.</span>
+                    <span><b className="font-semibold text-paper">Engine</b> ahead and astern. Ahead is the strong one; astern gives about a third of the speed. A loaded ship carries her momentum for a long way — brake early.</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="flex shrink-0 gap-1">{touch ? <Key wide>Bow</Key> : <><Key>Q</Key><Key>E</Key></>}</span>
-                    <span><b className="font-semibold text-paper">Bow tug</b> pushes or pulls the bow sideways.</span>
+                    <span><b className="font-semibold text-paper">Bow tug</b> pushes or pulls the bow sideways. With the tugs away these keys work the rudder with them.</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="flex shrink-0 gap-1">{touch ? <Key wide>Stern</Key> : <><Key>A</Key><Key>D</Key></>}</span>
-                    <span><b className="font-semibold text-paper">Stern tug</b> swings the stern; without tugs the same keys work the rudder.</span>
+                    <span><b className="font-semibold text-paper">Stern tug</b> swings the stern. Without tugs, bow and stern keys together are the ship&rsquo;s rudder — slow, and slow to answer.</span>
                   </li>
                   <li className="flex items-start gap-3 border-t border-paper/10 pt-2.5">
                     <span className="flex shrink-0 gap-1">{touch ? <span className="kbd"><Icon name="anchor" className="h-4 w-4" /></span> : <Key>T</Key>}</span>
                     <span><b className="font-semibold text-paper">Attach / cast off tugs.</b> Summon them inside the pilot station; cast off for narrow gates and for leaving harbour.</span>
                   </li>
                   <li className="flex items-start gap-3">
-                    <span className="flex shrink-0 gap-1">{touch ? <span className="kbd"><Icon name="horn" className="h-4 w-4" /></span> : <Key>H</Key>}</span>
+                    <span className="flex shrink-0 gap-1">{touch ? <span className="kbd"><Icon name="shipHorn" className="h-4 w-4" /></span> : <Key>H</Key>}</span>
                     <span><b className="font-semibold text-paper">Ship horn.</b> No mechanical use. It does sound magnificent.</span>
                   </li>
                   <li className="flex items-start gap-3 border-t border-paper/10 pt-2.5">
@@ -489,9 +489,10 @@ export function PauseScreen({
                 <Key>A</Key><Key>S</Key><Key>D</Key>
               </div>
               <div className="flex flex-col justify-center gap-0.5">
-                <div><b className="text-paper">W/S</b> engine · <b className="text-paper">Q/E</b> bow tug</div>
-                <div><b className="text-paper">A/D</b> stern tug · <b className="text-paper">Arrow keys</b> both</div>
-                <div className="text-paper-mute">Esc / P resumes</div>
+                <div><b className="text-paper">W/S</b> engine ahead · astern (⅓)</div>
+                <div><b className="text-paper">Q/E</b> bow · <b className="text-paper">A/D</b> stern · <b className="text-paper">Arrows</b> both</div>
+                <div className="text-paper-mute">Tugs away: the same keys work the rudder</div>
+                <div className="text-paper-mute"><b className="text-paper">Esc</b> or <b className="text-paper">P</b> to resume · <b className="text-paper">M</b> mute</div>
               </div>
             </div>
           )}
