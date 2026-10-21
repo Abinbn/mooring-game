@@ -38,6 +38,10 @@ export const DMG_FACTOR_QUAY = 5;
 export const DMG_THRESHOLD_HARD = 2;
 export const DMG_FACTOR_HARD = 9;
 
+// Tug pilotage contract: how long tugs may be dragged outside the pilot area
+// before the contract is revoked.
+export const TUG_BREACH_GRACE = 3;
+
 // Mooring
 export const SECURE_TIME = 1.6;
 export const MOOR_MAX_SPEED = 2.2;

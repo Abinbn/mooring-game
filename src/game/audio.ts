@@ -119,6 +119,33 @@ export class AudioSys {
     return this.muted;
   }
 
+  /** Release the audio graph (React unmount / hot reload). */
+  dispose() {
+    this.silenceLoops();
+    try {
+      this.engineOsc?.stop();
+      this.engineOsc2?.stop();
+    } catch {
+      /* already stopped */
+    }
+    try {
+      this.ctx?.close();
+    } catch {
+      /* already closed */
+    }
+    this.ctx = null;
+    this.master = null;
+    this.engineGain = null;
+    this.engineOsc = null;
+    this.engineOsc2 = null;
+    this.tugGain = null;
+    this.scrapeGain = null;
+    this.noiseBuffer = null;
+    this.lastEngine = -1;
+    this.lastTug = -1;
+    this.lastScrape = -1;
+  }
+
   /** Continuous engine/tug levels (0..1). Cheap to call every frame. */
   setLoops(engine: number, tug: number, scrape: number) {
     if (!this.ctx) return;

@@ -283,24 +283,24 @@ export function makeLevel(index: number, runSeed: number): LevelDef {
       side: exitSide,
       label:
         exitSide === "west"
-          ? "WEST OCEAN FAIRWAY ⬅"
+          ? "WEST OCEAN FAIRWAY"
           : exitSide === "north"
-          ? "NORTH STRAIT CHANNEL ⬆"
-          : "SOUTH SOUND PASSAGE ⬇",
+          ? "NORTH STRAIT CHANNEL"
+          : "SOUTH SOUND PASSAGE",
       threshold: exitSide === "west" ? -680 : exitSide === "north" ? -750 : 750,
     };
 
     if (narrowPassage) {
       // Spawn narrow passage gate buoys (gap 50m — cargo ship fits solo, tugs attached will hit!)
       if (exitSide === "west") {
-        buoys.push({ anchor: { x: -480, y: -26 }, color: "#ff5d5d" });
-        buoys.push({ anchor: { x: -480, y: 26 }, color: "#3ef2a0" });
+        buoys.push({ anchor: { x: -480, y: -26 }, color: "#d9564a" });
+        buoys.push({ anchor: { x: -480, y: 26 }, color: "#57b98a" });
       } else if (exitSide === "north") {
-        buoys.push({ anchor: { x: -290, y: -480 }, color: "#ff5d5d" });
-        buoys.push({ anchor: { x: -238, y: -480 }, color: "#3ef2a0" });
+        buoys.push({ anchor: { x: -290, y: -480 }, color: "#d9564a" });
+        buoys.push({ anchor: { x: -238, y: -480 }, color: "#57b98a" });
       } else {
-        buoys.push({ anchor: { x: -290, y: 480 }, color: "#ff5d5d" });
-        buoys.push({ anchor: { x: -238, y: 480 }, color: "#3ef2a0" });
+        buoys.push({ anchor: { x: -290, y: 480 }, color: "#d9564a" });
+        buoys.push({ anchor: { x: -238, y: 480 }, color: "#57b98a" });
       }
     }
   }
@@ -330,7 +330,7 @@ export function makeLevel(index: number, runSeed: number): LevelDef {
     if (Math.hypot(px - start.x, py - start.y) < 110) continue;
     if (px > -70 && Math.abs(py) < SHIP_L / 2 + 70) continue;
     if (px > -40) continue;
-    buoys.push({ anchor: { x: px, y: py }, color: r() < 0.5 ? "#ff5d5d" : "#3ef2a0" });
+    buoys.push({ anchor: { x: px, y: py }, color: r() < 0.5 ? "#d9564a" : "#57b98a" });
   }
 
   // Moored neighbour ships
@@ -349,7 +349,7 @@ export function makeLevel(index: number, runSeed: number): LevelDef {
   let tipKeys = "";
   let tipTouch = "";
   if (isDeparture) {
-    const dirTxt = exitSide === "west" ? "West [⬅]" : exitSide === "north" ? "North [⬆]" : "South [⬇]";
+    const dirTxt = exitSide === "west" ? "West" : exitSide === "north" ? "North" : "South";
     if (narrowPassage) {
       tipKeys = `Outbound to ${dirTxt}. NARROW PASSAGE: Detach tugs with [T] before gate! Dragging tugs to sea fails contract.`;
       tipTouch = `Outbound to ${dirTxt}. NARROW PASSAGE: Detach tugs with [T] before gate! Dragging tugs to sea fails contract.`;

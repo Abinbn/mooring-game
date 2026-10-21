@@ -28,6 +28,7 @@ import {
   SHIP_L,
   SHIP_W,
   TUG_ANCHOR,
+  TUG_BREACH_GRACE,
   TUG_FORCE,
   TUG_L,
   TUG_RAMP,
@@ -81,6 +82,11 @@ export type { MissionType } from "./levels";
 export type Phase = "menu" | "playing" | "paused" | "levelClear" | "gameover";
 export type Action = "ahead" | "astern" | "bowLeft" | "bowRight" | "sternLeft" | "sternRight";
 export type TugAttachmentState = "standby" | "approaching" | "attached";
+
+/** Score screens linger this long before the next contract starts. */
+export const LEVEL_CLEAR_HOLD = 6;
+/** Level time limits above this mean "no clock". */
+const UNLIMITED_TIME = 9000;
 
 export interface TutorialInfo {
   step: number;
@@ -143,6 +149,10 @@ export interface HudData {
   tutorial?: TutorialInfo;
   rudder: number;
   tugPenaltyWarning: boolean;
+  /** Seconds left before the pilotage contract is revoked, or null. */
+  tugBreachIn: number | null;
+  /** True for missions without a clock (the academy). */
+  unlimitedTime: boolean;
   departureExit?: DepartureExit;
 }
 
@@ -262,6 +272,7 @@ export class Game {
   private tugState: TugAttachmentState = "standby";
   private tugAttachTimer = 0;
   private tugPenaltyTimer = 0;
+  private tugBreachTimer = 0;
 
   // Tutorial state
   private tutorialStep = 0;
@@ -271,6 +282,15 @@ export class Game {
   // Departure & Mooring lines state
   private departureCleared = false;
   private mooringLinesAttached = false;
+
+  // UI-aware camera framing (measured from the DOM)
+  private uiTop = 12;
+  private uiBottom = 12;
+  private lastMeasure = 0;
+
+  // Deferred audio/FX callbacks, cleared on destroy
+  private timers: number[] = [];
+  private reducedMotion = false;
 
   // Camera / juice
   private cam = { x: 0, y: 0, zoom: 1.5 };
@@ -310,8 +330,10 @@ export class Game {
       seed: 4242,
     };
     this.runSeed = Math.floor(Math.random() * 1e9);
-    this.loadLevel(1, true);
     this.resize();
+    this.measureUi();
+    this.loadLevel(1, true);
+    this.snapCamera();
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("keyup", this.onKeyUp);
     window.addEventListener("blur", this.onBlur);
@@ -326,7 +348,8 @@ export class Game {
     window.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("blur", this.onBlur);
     document.removeEventListener("visibilitychange", this.onVisibility);
-    this.audio.silenceLoops();
+    this.clearTimers();
+    this.audio.dispose();
   }
 
   // ───────────────────────── Public API ─────────────────────────
@@ -338,10 +361,62 @@ export class Game {
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.canvas.width = Math.round(this.w * this.dpr);
     this.canvas.height = Math.round(this.h * this.dpr);
+    this.measureUi();
   }
 
   setTouchMode(on: boolean) {
     this.touchMode = on;
+    this.measureUi();
+  }
+
+  /** Re-measure the HUD/pad chrome (called when the React layer mounts/unmounts UI). */
+  refreshUiInsets() {
+    this.measureUi();
+  }
+
+  setReducedMotion(on: boolean) {
+    this.reducedMotion = on;
+    if (on) {
+      this.trauma = 0;
+      this.flash = 0;
+      this.hitStop = 0;
+    }
+  }
+
+  /**
+   * The camera frames the ship inside the part of the screen the HUD and the
+   * touch pad are not covering. The React layer tags those elements, so we
+   * measure them instead of guessing pixel offsets.
+   */
+  private measureUi() {
+    if (typeof document === "undefined") return;
+    const top = document.querySelector<HTMLElement>("[data-ui-top]");
+    const pad = document.querySelector<HTMLElement>("[data-ui-pad]");
+    const t = top ? top.getBoundingClientRect().bottom : 12;
+    const b = pad ? Math.max(0, window.innerHeight - pad.getBoundingClientRect().top) : 12;
+    // Never let chrome eat more than half the viewport (tiny landscape screens).
+    this.uiTop = Math.round(Math.min(Math.max(0, t), this.h * 0.42));
+    this.uiBottom = Math.round(Math.min(Math.max(0, b), this.h * 0.5));
+  }
+
+  private snapCamera() {
+    const t = this.cameraTarget();
+    this.cam.x = t.x;
+    this.cam.y = t.y;
+    this.cam.zoom = t.zoom;
+  }
+
+  private later(fn: () => void, ms: number) {
+    const id = window.setTimeout(() => {
+      this.timers = this.timers.filter((t) => t !== id);
+      fn();
+    }, ms);
+    this.timers.push(id);
+  }
+
+  private clearTimers() {
+    for (const id of this.timers) window.clearTimeout(id);
+    this.timers.length = 0;
   }
 
   isInRendezvousRange(): boolean {
@@ -349,7 +424,7 @@ export class Game {
     if (!rz) return true;
     const dx = this.pos.x - rz.x;
     const dy = this.pos.y - rz.y;
-    return dx * dx + dy * dy <= rz.radius * rz.radius || (this.pos.x > rz.x - 50 && Math.abs(dy) <= rz.radius);
+    return dx * dx + dy * dy <= rz.radius * rz.radius;
   }
 
   isInPilotArea(): boolean {
@@ -377,7 +452,7 @@ export class Game {
       this.audio.tugToot(35);
       this.particles.burst(this.tugs[0].worldPos.x, this.tugs[0].worldPos.y, "foam", 12, 22);
       this.particles.burst(this.tugs[1].worldPos.x, this.tugs[1].worldPos.y, "foam", 12, 22);
-      this.addText(this.pos.x, this.pos.y - SHIP_W - 22, "TUGS DETACHED / STANDBY", "#38e1ff", 20);
+      this.addText(this.pos.x, this.pos.y - SHIP_W - 22, "TUGS DETACHED / STANDBY", "#6fb9c9", 20);
     } else if (this.tugState === "standby") {
       if (
         this.isInPilotArea() &&
@@ -386,13 +461,13 @@ export class Game {
         this.tugState = "approaching";
         this.tugAttachTimer = 1.4;
         this.audio.tugToot(0);
-        this.addText(this.pos.x, this.pos.y - SHIP_W - 22, "TUGS STEAMING TO ATTACH", "#3ef2a0", 20);
-        setTimeout(() => {
+        this.addText(this.pos.x, this.pos.y - SHIP_W - 22, "TUGS STEAMING TO ATTACH", "#57b98a", 20);
+        this.later(() => {
           if (this.phase === "playing") this.audio.tugToot(40);
         }, 360);
       } else {
         this.audio.bump();
-        this.addText(this.pos.x, this.pos.y - SHIP_W - 22, "OUTSIDE PILOT ZONE — CANNOT ATTACH", "#ff5d5d", 18);
+        this.addText(this.pos.x, this.pos.y - SHIP_W - 22, "OUTSIDE PILOT ZONE — CANNOT ATTACH", "#d9564a", 18);
       }
     }
   }
@@ -411,14 +486,14 @@ export class Game {
 
     this.particles.steamPuff(fx, fy, this.vel.x, this.vel.y, 20);
     this.particles.hornShockwaves(this.pos.x, this.pos.y);
-    this.addText(this.pos.x, this.pos.y - SHIP_W - 10, "📯 HOOOORN!", "#ffd97d", 20);
+    this.addText(this.pos.x, this.pos.y - SHIP_W - 10, "HORN", "#f0a63c", 20);
     this.trauma = Math.min(1, this.trauma + 0.08);
 
     // Decorative tug call-and-response whistle
-    setTimeout(() => {
+    this.later(() => {
       if (this.phase === "playing") this.audio.tugToot(0);
     }, 380);
-    setTimeout(() => {
+    this.later(() => {
       if (this.phase === "playing") this.audio.tugToot(55);
     }, 700);
   }
@@ -573,6 +648,11 @@ export class Game {
       tutorial: this.getTutorialInfo(),
       rudder: this.rudder,
       tugPenaltyWarning: this.tugState === "attached" && !this.isInPilotArea(),
+      tugBreachIn:
+        this.tugState === "attached" && !this.isInPilotArea() && this.level.missionType !== "tutorial"
+          ? Math.max(0, TUG_BREACH_GRACE - this.tugBreachTimer)
+          : null,
+      unlimitedTime: this.level.timeLimit > UNLIMITED_TIME,
       departureExit: this.level.departureExit,
     };
   }
@@ -618,6 +698,7 @@ export class Game {
     this.departureCleared = false;
     this.mooringLinesAttached = lv.missionType === "departure";
     this.tugPenaltyTimer = 0;
+    this.tugBreachTimer = 0;
     this.tutorialStep = 0;
     this.tutorialStepTimer = 0;
     this.tutorialStepCompleted = false;
@@ -768,6 +849,12 @@ export class Game {
       this.hudTimer = 0;
       this.cb.onHud(this.getHud());
     }
+
+    this.lastMeasure += dt;
+    if (this.lastMeasure > 0.4) {
+      this.lastMeasure = 0;
+      this.measureUi();
+    }
   };
 
   private currentAt(t: number): Vec {
@@ -821,7 +908,7 @@ export class Game {
       if (this.tugAttachTimer <= 0) {
         this.tugAttachTimer = 0;
         this.tugState = "attached";
-        this.addText(this.pos.x, this.pos.y - SHIP_W - 22, "TUGS SECURED & READY", "#3ef2a0", 20);
+        this.addText(this.pos.x, this.pos.y - SHIP_W - 22, "TUGS SECURED & READY", "#57b98a", 20);
         this.audio.bump();
       }
     }
@@ -931,21 +1018,28 @@ export class Game {
         this.mooringLinesAttached = false;
         this.audio.splash();
         this.particles.burst(QUAY_X - 2, this.pos.y, "foam", 14, 30);
-        this.addText(this.pos.x, this.pos.y - SHIP_W - 16, "LINES CAST OFF!", "#ffd97d", 20);
+        this.addText(this.pos.x, this.pos.y - SHIP_W - 16, "LINES CAST OFF!", "#e0b877", 20);
       }
     }
 
-    // Tug pilot boundary violation check (-5 pts penalty)
+    // Tug pilot-boundary breach: fine, then fail the contract after a grace
+    // period. The academy is exempt — it sends the ship out on purpose.
     if (playing && this.tugState === "attached" && !this.isInPilotArea()) {
+      this.tugBreachTimer += dt;
       this.tugPenaltyTimer += dt;
       if (this.tugPenaltyTimer >= 0.7) {
         this.tugPenaltyTimer = 0;
         this.score = Math.max(0, this.score - 5);
         this.audio.bump();
-        this.addText(this.pos.x, this.pos.y - SHIP_W - 25, "-5 PTS: TUGS OUTSIDE PILOT AREA", "#ff5d5d", 16);
+        this.addText(this.pos.x, this.pos.y - SHIP_W - 25, "−5 PTS · TUGS OUTSIDE PILOT AREA", "#d9564a", 15);
+      }
+      if (this.level.missionType !== "tutorial" && this.tugBreachTimer >= TUG_BREACH_GRACE) {
+        this.gameOver("tug_open_sea");
+        return;
       }
     } else {
       this.tugPenaltyTimer = 0;
+      this.tugBreachTimer = 0;
     }
 
     if (playing) {
@@ -990,7 +1084,27 @@ export class Game {
       const np = transformPoly(HULL, this.pos, this.heading);
       for (let i = 0; i < np.length; i++) poly[i] = np[i];
     }
+    this.clampToBasin();
     this.scrapeLevel = damp(this.scrapeLevel, clamp01((scraping - 2.5) / 10), 10, dt);
+  }
+
+  /**
+   * Belt-and-braces constraint: the quay is a solid wall, the rocks close the
+   * basin. If a deep or fast contact ever lets SAT resolve the wronG way, the
+   * hull is pushed back instead of being ejected onto land.
+   */
+  private clampToBasin() {
+    const poly = transformPoly(HULL, this.pos, this.heading);
+    let maxX = -Infinity;
+    for (const v of poly) maxX = Math.max(maxX, v.x);
+    if (maxX > QUAY_X) {
+      this.pos.x -= maxX - QUAY_X;
+      if (this.vel.x > 0) this.vel.x = 0;
+      this.angVel *= 0.97;
+    }
+    const lim = 1240;
+    this.pos.x = clamp(this.pos.x, -lim, QUAY_X);
+    this.pos.y = clamp(this.pos.y, -lim, lim);
   }
 
   /** Resolves a contact; returns the tangential sliding speed for scrape FX. */
@@ -1062,7 +1176,7 @@ export class Game {
       this.audio.bump();
       if (kind === "quay" && !this.softTouchGiven && speed > 0.8) {
         this.softTouchGiven = true;
-        this.addScore(75, point, "SOFT TOUCH +75", "#3ef2a0", 15);
+        this.addScore(75, point, "SOFT TOUCH +75", "#57b98a", 15);
       }
     }
   }
@@ -1072,7 +1186,7 @@ export class Game {
     this.hull -= dmg;
     this.levelDamage += dmg;
     if (point && dmg >= 1) {
-      this.addText(point.x, point.y, `-${Math.round(dmg)} HULL`, "#ff5d5d", dmg > 15 ? 20 : 15);
+      this.addText(point.x, point.y, `-${Math.round(dmg)} HULL`, "#d9564a", dmg > 15 ? 20 : 15);
     }
     if (this.hull <= 0) {
       this.hull = 0;
@@ -1096,7 +1210,7 @@ export class Game {
       const d = Math.random() * SHIP_L * 0.45;
       this.particles.smoke(this.pos.x + Math.cos(a) * d, this.pos.y + Math.sin(a) * d, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, 4 + Math.random() * 5);
     }
-    this.addText(this.pos.x, this.pos.y - 30, "HULL BREACH!", "#ff5d5d", 28);
+    this.addText(this.pos.x, this.pos.y - 30, "HULL BREACH!", "#d9564a", 28);
     this.keys.clear();
     this.recomputeInput();
   }
@@ -1141,7 +1255,7 @@ export class Game {
             this.trauma = Math.min(1, this.trauma + 0.15);
             this.audio.bump();
           } else {
-            this.addText(b.pos.x, b.pos.y - 10, "BUOY!", "#ffb340", 13);
+            this.addText(b.pos.x, b.pos.y - 10, "BUOY!", "#f0a63c", 13);
           }
         }
       }
@@ -1207,15 +1321,15 @@ export class Game {
     this.hull = Math.min(100, this.hull + HULL_REPAIR_PER_LEVEL);
     this.secure = 1;
     this.mooringLinesAttached = true;
-    this.levelClearTimer = 3.4;
+    this.levelClearTimer = LEVEL_CLEAR_HOLD;
 
     this.audio.success();
     this.audio.horn(true);
     if (isPerfect) this.audio.perfect();
     this.particles.confetti(this.pos.x, this.pos.y, 110, 110);
     this.particles.ripple(this.pos.x, this.pos.y, 10, 2);
-    this.addText(this.pos.x - 10, this.pos.y - SHIP_W, "MOORED!", "#3ef2a0", 34);
-    if (isPerfect) this.addText(this.pos.x - 10, this.pos.y + SHIP_W + 6, "PERFECT BERTHING", "#ffb340", 20);
+    this.addText(this.pos.x - 10, this.pos.y - SHIP_W, "MOORED!", "#57b98a", 34);
+    if (isPerfect) this.addText(this.pos.x - 10, this.pos.y + SHIP_W + 6, "PERFECT BERTHING", "#f0a63c", 20);
     this.trauma = Math.min(1, this.trauma + 0.2);
 
     const breakdown: Breakdown = {
@@ -1279,15 +1393,15 @@ export class Game {
     this.scoreBump++;
     this.stats.moorings++;
     this.hull = Math.min(100, this.hull + HULL_REPAIR_PER_LEVEL);
-    this.levelClearTimer = 3.6;
+    this.levelClearTimer = LEVEL_CLEAR_HOLD;
 
     this.audio.success();
     this.audio.horn(true);
     if (isPerfect) this.audio.perfect();
     this.particles.confetti(this.pos.x, this.pos.y, 110, 110);
     this.particles.ripple(this.pos.x, this.pos.y, 12, 2.5);
-    this.addText(this.pos.x - 20, this.pos.y - SHIP_W, "CLEARED FOR SEA!", "#3ef2a0", 34);
-    if (isPerfect) this.addText(this.pos.x - 20, this.pos.y + SHIP_W + 6, "FLAWLESS DEPARTURE", "#ffb340", 20);
+    this.addText(this.pos.x - 20, this.pos.y - SHIP_W, "CLEARED FOR SEA!", "#57b98a", 34);
+    if (isPerfect) this.addText(this.pos.x - 20, this.pos.y + SHIP_W + 6, "FLAWLESS DEPARTURE", "#f0a63c", 20);
     this.trauma = Math.min(1, this.trauma + 0.2);
 
     const breakdown: Breakdown = {
@@ -1316,34 +1430,34 @@ export class Game {
       {
         title: "ENGINE AHEAD",
         instruction: "Engage forward propulsion to build speed towards the harbour.",
-        keyHint: touch ? "▲ AHEAD" : "[W] or [↑]",
+        keyHint: touch ? "AHEAD" : "W or Up",
       },
       {
         title: "ENGINE ASTERN / BRAKING",
         instruction: "Reverse propulsion to decelerate. Big cargo ships have heavy momentum!",
-        keyHint: touch ? "▼ ASTERN" : "[S] or [↓]",
+        keyHint: touch ? "ASTERN" : "S or Down",
       },
       {
         title: "TUG RENDEZVOUS & ATTACH",
         instruction: touch
-          ? "Approach the pilot station, then tap the ⚓ button to summon and attach the standby tugboats."
+          ? "Approach the pilot station, then tap the anchor button to summon and attach the standby tugboats."
           : "Approach the pilot station and press [T] to summon and attach standby tugboats.",
-        keyHint: touch ? "⚓ TUGS" : "[T] or ⚓",
+        keyHint: touch ? "ANCHOR" : "T",
       },
       {
         title: "BOW TUG (FORWARD)",
         instruction: "Use the bow tug to swing the ship's head port or starboard.",
-        keyHint: touch ? "BOW ◀ ▶" : "[Q] / [E]",
+        keyHint: touch ? "BOW PAD" : "Q / E",
       },
       {
         title: "STERN TUG (AFT)",
         instruction: "Use the stern tug to pivot the stern alongside the quay.",
-        keyHint: touch ? "STERN ◀ ▶" : "[A] / [D]",
+        keyHint: touch ? "STERN PAD" : "A / D",
       },
       {
         title: "LATERAL CRAB SLIDE",
         instruction: "Work both tugs simultaneously to push the ship sideways toward the dock.",
-        keyHint: touch ? "BOTH TUGS" : "[←] / [→]",
+        keyHint: touch ? "BOTH PADS" : "LEFT / RIGHT",
       },
       {
         title: "BERTHING & SECURING LINES",
@@ -1353,12 +1467,12 @@ export class Game {
       {
         title: "OUTBOUND UNMOORING & DEPARTURE",
         instruction: "Now unmoor! Use tugs to peel away from the quay and throttle out toward open sea.",
-        keyHint: "STEER ⬅ WEST",
+        keyHint: "STEER WEST",
       },
       {
         title: "ACADEMY GRADUATE",
         instruction: "Mastery achieved! You are fully qualified for commercial harbour pilotage.",
-        keyHint: "CERTIFIED PILOT ⚓",
+        keyHint: "CERTIFIED",
       },
     ];
 
@@ -1470,7 +1584,7 @@ export class Game {
           this.secure = 0;
           this.audio.success();
           this.particles.confetti(this.pos.x, this.pos.y, 80, 80);
-          this.addScore(1000, this.pos, "BERTH SECURED! +1000", "#3ef2a0", 26);
+          this.addScore(1000, this.pos, "BERTH SECURED! +1000", "#57b98a", 26);
           this.tutorialStep++;
           this.tutorialStepCompleted = false;
           this.tutorialStepTimer = 0;
@@ -1483,7 +1597,7 @@ export class Game {
           this.tutorialStepCompleted = true;
           this.audio.shipHorn();
           this.particles.confetti(this.pos.x, this.pos.y, 90, 90);
-          this.addScore(1500, this.pos, "CLEARED HARBOUR! +1500", "#3ef2a0", 26);
+          this.addScore(1500, this.pos, "CLEARED HARBOUR! +1500", "#57b98a", 26);
           this.tutorialStep++;
           this.tutorialStepCompleted = false;
           this.tutorialStepTimer = 0;
@@ -1517,7 +1631,7 @@ export class Game {
       total: 5500,
     };
     this.score += 5500;
-    this.levelClearTimer = 3.4;
+    this.levelClearTimer = LEVEL_CLEAR_HOLD;
     this.keys.clear();
     this.recomputeInput();
     this.audio.silenceLoops();
@@ -1557,8 +1671,14 @@ export class Game {
 
   private updateVisual(dt: number) {
     this.displayScore = damp(this.displayScore, this.score, 7, dt);
-    this.trauma = Math.max(0, this.trauma - dt * 1.6);
-    this.flash = Math.max(0, this.flash - dt * 2.5);
+    if (this.reducedMotion) {
+      this.trauma = 0;
+      this.flash = 0;
+      this.hitStop = 0;
+    } else {
+      this.trauma = Math.max(0, this.trauma - dt * 1.6);
+      this.flash = Math.max(0, this.flash - dt * 2.5);
+    }
 
     const cur = this.currentAt(this.time);
     this.particles.update(dt, cur.x, cur.y);
@@ -1780,7 +1900,7 @@ export class Game {
   // ───────────────────────── Camera ─────────────────────────
 
   private insets() {
-    return { top: 64, bottom: this.touchMode ? 196 : 28 };
+    return { top: this.uiTop + 8, bottom: this.uiBottom + 8 };
   }
 
   private cameraTarget() {
@@ -1788,7 +1908,7 @@ export class Game {
     const vw = this.w;
     const vh = Math.max(120, this.h - ins.top - ins.bottom);
     if (this.phase === "menu") {
-      const zoom = clamp(Math.min(vw, vh) / 360, 0.8, 2);
+      const zoom = clamp(Math.min(this.w, this.h) / 360, 0.8, 2);
       // keep the ship peeking out beside the menu panels
       const wide = vw > 900;
       return {
@@ -1913,7 +2033,7 @@ export class Game {
     }
 
     if (this.level.missionType === "arrival" || (this.level.missionType === "tutorial" && this.tutorialStep <= 6)) {
-      drawBerthZone(ctx, this.level.berth, this.align.all ? "#3ef2a0" : "#38e1ff", this.time);
+      drawBerthZone(ctx, this.level.berth, this.align.all ? "#57b98a" : "#6fb9c9", this.time);
     }
     drawQuayBase(ctx, this.level, view, this.time, pal);
 
@@ -1922,7 +2042,7 @@ export class Game {
     const ghostHeading = Math.abs(angleDiff(this.heading, -UP)) < Math.abs(angleDiff(this.heading, UP)) ? -UP : UP;
     const ghostPoly = transformPoly(HULL, ghostPos, ghostHeading);
     if (this.phase !== "menu" && !(this.phase === "levelClear") && (this.level.missionType === "arrival" || (this.level.missionType === "tutorial" && this.tutorialStep <= 6))) {
-      const col = this.align.all ? "#3ef2a0" : this.align.pos ? "#ffb340" : "#38e1ff";
+      const col = this.align.all ? "#57b98a" : this.align.pos ? "#f0a63c" : "#6fb9c9";
       drawGhost(ctx, ghostPoly, col, 0.55 + Math.sin(this.time * 4) * 0.15, this.time);
     }
 
@@ -2005,7 +2125,7 @@ export class Game {
       ctx.beginPath();
       ctx.arc(0, 0, 30, 0, 6.2832);
       ctx.stroke();
-      ctx.strokeStyle = "#3ef2a0";
+      ctx.strokeStyle = "#57b98a";
       ctx.lineWidth = 3.5;
       ctx.beginPath();
       ctx.arc(0, 0, 30, -Math.PI / 2, -Math.PI / 2 + this.secure * 6.2832);
@@ -2023,7 +2143,7 @@ export class Game {
       const py = cy + sy + (ft.y - this.cam.y) * zoom - k * 46;
       const pop = k < 0.15 ? 0.6 + (k / 0.15) * 0.5 : 1.1 - (k - 0.15) * 0.12;
       ctx.globalAlpha = k > 0.6 ? 1 - (k - 0.6) / 0.4 : 1;
-      ctx.font = `900 ${Math.round(ft.size * pop)}px Rubik, system-ui, sans-serif`;
+      ctx.font = `700 ${Math.round(ft.size * pop)}px Inter, Segoe UI, system-ui, sans-serif`;
       ctx.lineWidth = 4;
       ctx.strokeStyle = "rgba(0,12,20,0.75)";
       ctx.strokeText(ft.text, px, py);
@@ -2044,7 +2164,7 @@ export class Game {
     }
     if (this.phase === "playing" && this.timeLeft < 10 && this.introTimer <= 0) {
       const pulse = (Math.sin(this.time * 8) + 1) * 0.5;
-      ctx.strokeStyle = `rgba(255,93,93,${0.25 + pulse * 0.35})`;
+      ctx.strokeStyle = `rgba(217,86,74,${0.25 + pulse * 0.35})`;
       ctx.lineWidth = 10;
       ctx.strokeRect(0, 0, w, h);
     }

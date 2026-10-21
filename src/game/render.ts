@@ -243,9 +243,9 @@ export function drawQuayBase(
   // Berth zone highlight on the quay
   const bTop = berth.y - berth.halfLen;
   const bBot = berth.y + berth.halfLen;
-  ctx.fillStyle = "rgba(56,225,255,0.10)";
+  ctx.fillStyle = "rgba(111,185,201,0.10)";
   ctx.fillRect(QUAY_X, bTop, 36, bBot - bTop);
-  ctx.fillStyle = "rgba(56,225,255,0.35)";
+  ctx.fillStyle = "rgba(111,185,201,0.35)";
   ctx.fillRect(QUAY_X + 9, bTop, 2, bBot - bTop);
 
   // Hazard stripes at berth ends
@@ -274,7 +274,7 @@ export function drawQuayBase(
   ctx.translate(QUAY_X + 26, berth.y);
   ctx.rotate(Math.PI / 2);
   ctx.fillStyle = "rgba(255,255,255,0.35)";
-  ctx.font = "900 26px Rubik, system-ui, sans-serif";
+  ctx.font = "700 26px Inter, Segoe UI, system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(level.berthNumber, 0, 0);
@@ -380,7 +380,7 @@ export function drawCraneOverhead(ctx: CanvasRenderingContext2D, level: LevelDef
   // trolley + spreader
   ctx.fillStyle = "#2b2b2b";
   ctx.fillRect(QUAY_X + trolley - 4, cy - 5, 8, 10);
-  ctx.fillStyle = "#ff5d5d";
+  ctx.fillStyle = "#d9564a";
   ctx.fillRect(QUAY_X + trolley - 2.5, cy - 2, 5, 4);
   // cab
   ctx.fillStyle = "#1f2a33";
@@ -525,11 +525,11 @@ export function drawShip(ctx: CanvasRenderingContext2D, s: ShipVisual, opts: Shi
     ctx.beginPath();
     ctx.arc(sx0 + 8, 0, 1.3, 0, 6.2832);
     ctx.fill();
-    ctx.fillStyle = "#ff5d5d";
+    ctx.fillStyle = "#d9564a";
     ctx.beginPath();
     ctx.arc(L * 0.1, -W / 2 + 1, 0.9, 0, 6.2832);
     ctx.fill();
-    ctx.fillStyle = "#3ef2a0";
+    ctx.fillStyle = "#57b98a";
     ctx.beginPath();
     ctx.arc(L * 0.1, W / 2 - 1, 0.9, 0, 6.2832);
     ctx.fill();
@@ -645,7 +645,7 @@ export function drawBuoy(ctx: CanvasRenderingContext2D, pos: Vec, color: string,
   ctx.fill();
   if (lights) {
     const g = ctx.createRadialGradient(0, 0, 1, 0, 0, 26);
-    g.addColorStop(0, color === "#ff5d5d" ? "rgba(255,93,93,0.45)" : "rgba(62,242,160,0.45)");
+    g.addColorStop(0, color === "#d9564a" ? "rgba(217,86,74,0.45)" : "rgba(87,185,138,0.45)");
     g.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = g;
     ctx.fillRect(-26, -26, 52, 52);
@@ -694,8 +694,8 @@ export function drawBerthZone(ctx: CanvasRenderingContext2D, berth: Berth, color
   const y0 = berth.y - berth.halfLen;
   const h = berth.halfLen * 2;
   const g = ctx.createLinearGradient(x0, 0, QUAY_X, 0);
-  g.addColorStop(0, "rgba(56,225,255,0)");
-  g.addColorStop(1, "rgba(56,225,255,0.14)");
+  g.addColorStop(0, "rgba(111,185,201,0)");
+  g.addColorStop(1, "rgba(111,185,201,0.14)");
   ctx.fillStyle = g;
   ctx.fillRect(x0, y0, QUAY_X - x0, h);
   // Chevrons pointing at the quay
@@ -775,26 +775,26 @@ export function drawRendezvousZone(
 ) {
   ctx.save();
   const pulse = (time * 0.7) % 1;
-  ctx.strokeStyle = inRange ? "rgba(255, 179, 64, 0.5)" : "rgba(56, 225, 255, 0.35)";
+  ctx.strokeStyle = inRange ? "rgba(240, 166, 60, 0.5)" : "rgba(111, 185, 201, 0.35)";
   ctx.lineWidth = 2;
   ctx.setLineDash([8, 8]);
   ctx.beginPath();
   ctx.arc(rz.x, rz.y, rz.radius, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.strokeStyle = inRange ? "rgba(255, 179, 64, 0.3)" : "rgba(56, 225, 255, 0.2)";
+  ctx.strokeStyle = inRange ? "rgba(240, 166, 60, 0.3)" : "rgba(111, 185, 201, 0.2)";
   ctx.lineWidth = 1.5;
   ctx.setLineDash([]);
   ctx.beginPath();
   ctx.arc(rz.x, rz.y, rz.radius * pulse, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.fillStyle = inRange ? "#ffb340" : "#38e1ff";
+  ctx.fillStyle = inRange ? "#f0a63c" : "#6fb9c9";
   ctx.beginPath();
   ctx.arc(rz.x, rz.y, 4.5, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.font = "bold 11px Rubik, system-ui, sans-serif";
+  ctx.font = "600 11px Inter, Segoe UI, system-ui, sans-serif";
   ctx.fillStyle = inRange ? "rgba(255, 220, 140, 0.95)" : "rgba(180, 240, 255, 0.8)";
   ctx.textAlign = "center";
   ctx.fillText(inRange ? "PILOT STATION [T]" : "PILOT STATION", rz.x, rz.y - 12);
@@ -807,24 +807,35 @@ export function drawPilotBoundary(
   time: number,
   view: WorldView,
 ) {
-  if (view.right < pb.minX - 50 || view.left > pb.minX + 50) return;
+  // Nothing to draw if the whole boundary is off screen.
+  if (view.right < pb.minX - 40 || view.left > pb.maxX + 40 || view.bottom < pb.minY - 40 || view.top > pb.maxY + 40) return;
+
   ctx.save();
-  ctx.setLineDash([8, 8]);
-  ctx.strokeStyle = "rgba(56, 225, 255, 0.35)";
+  ctx.setLineDash([10, 9]);
+  ctx.lineDashOffset = -((time * 10) % 19);
+  ctx.strokeStyle = "rgba(111, 185, 201, 0.30)";
+  ctx.lineWidth = 1.6;
+  ctx.strokeRect(pb.minX, pb.minY, pb.maxX - pb.minX, pb.maxY - pb.minY);
+
+  // The seaward line is the one the player is warned about.
+  ctx.setLineDash([]);
+  ctx.strokeStyle = "rgba(111, 185, 201, 0.5)";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(pb.minX, Math.max(view.top, pb.minY));
   ctx.lineTo(pb.minX, Math.min(view.bottom, pb.maxY));
   ctx.stroke();
 
-  const offset = (time * 16) % 32;
+  // Label rides along the line so it reads wherever the camera sits.
+  const bandY = Math.min(Math.max(0, pb.minY + 70), pb.maxY - 70);
   ctx.save();
-  ctx.translate(pb.minX - 12, 0);
+  ctx.translate(pb.minX - 13, bandY);
   ctx.rotate(-Math.PI / 2);
-  ctx.font = "bold 11px Rubik, system-ui, sans-serif";
-  ctx.fillStyle = "rgba(56, 225, 255, 0.75)";
+  ctx.font = "600 10px Inter, Segoe UI, system-ui, sans-serif";
+  ctx.fillStyle = "rgba(160, 205, 214, 0.8)";
   ctx.textAlign = "center";
-  ctx.fillText("⚓ PILOT AREA LIMIT · DETACH TUGS [T] BEYOND", 0 + offset, 0);
+  ctx.textBaseline = "middle";
+  ctx.fillText("PILOT LIMIT · CAST OFF TUGS BEFORE CROSSING", 0, 0);
   ctx.restore();
 
   ctx.restore();
@@ -838,11 +849,11 @@ export function drawDepartureFairway(
 ) {
   const side = exit?.side ?? "west";
   const threshold = exit?.threshold ?? -680;
-  const label = exit?.label ?? "WEST OCEAN FAIRWAY ⬅";
+  const label = exit?.label ?? "WEST OCEAN FAIRWAY";
 
   ctx.save();
   ctx.setLineDash([12, 12]);
-  ctx.strokeStyle = "rgba(62, 242, 160, 0.65)";
+  ctx.strokeStyle = "rgba(87, 185, 138, 0.65)";
   ctx.lineWidth = 3;
 
   if (side === "west") {
@@ -856,8 +867,8 @@ export function drawDepartureFairway(
     ctx.stroke();
 
     const offset = (time * 18) % 30;
-    ctx.font = "bold 12px Rubik, system-ui, sans-serif";
-    ctx.fillStyle = "rgba(62, 242, 160, 0.95)";
+    ctx.font = "600 12px Inter, Segoe UI, system-ui, sans-serif";
+    ctx.fillStyle = "rgba(87, 185, 138, 0.95)";
     ctx.textAlign = "center";
     ctx.fillText(label, threshold - 50, -120 + offset);
     ctx.fillText(label, threshold - 50, 120 + offset);
@@ -872,8 +883,8 @@ export function drawDepartureFairway(
     ctx.stroke();
 
     const offset = (time * 18) % 30;
-    ctx.font = "bold 12px Rubik, system-ui, sans-serif";
-    ctx.fillStyle = "rgba(62, 242, 160, 0.95)";
+    ctx.font = "600 12px Inter, Segoe UI, system-ui, sans-serif";
+    ctx.fillStyle = "rgba(87, 185, 138, 0.95)";
     ctx.textAlign = "center";
     ctx.fillText(label, -270, threshold - 24 - offset * 0.3);
   } else if (side === "south") {
@@ -887,8 +898,8 @@ export function drawDepartureFairway(
     ctx.stroke();
 
     const offset = (time * 18) % 30;
-    ctx.font = "bold 12px Rubik, system-ui, sans-serif";
-    ctx.fillStyle = "rgba(62, 242, 160, 0.95)";
+    ctx.font = "600 12px Inter, Segoe UI, system-ui, sans-serif";
+    ctx.fillStyle = "rgba(87, 185, 138, 0.95)";
     ctx.textAlign = "center";
     ctx.fillText(label, -270, threshold + 24 + offset * 0.3);
   }
