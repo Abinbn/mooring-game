@@ -90,6 +90,8 @@ docs/HUD_UI_AUDIT.md      UI audit that preceded this release pass
 
 - Full keyboard play, visible focus rings, `aria-pressed` on toggles, and the
   hull bar exposed as a progressbar.
+- Pinch-zoom is disabled on purpose: a two-finger zoom mid-manoeuvre would fight
+  the on-screen controls. Text is sized to stay legible without it.
 - `prefers-reduced-motion` disables screen shake, flashes, hit-stop and UI
   animation loops.
 - No emoji or platform-dependent glyphs in the interface.

@@ -33,7 +33,7 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
         <div className="panel-flat overflow-hidden rounded-lg">
           <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch">
             {/* Mission */}
-            <div className="min-w-0 px-2.5 py-1.5">
+            <div className="min-w-0 px-2.5 py-1.5 short:py-1">
               <div className="label truncate text-paper-mute">
                 {hud.missionType === "tutorial" ? "Academy" : `Contract ${hud.level}`}
               </div>
@@ -58,7 +58,7 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
             </div>
 
             {/* Clock */}
-            <div className="flex flex-col items-center justify-center border-x border-paper/10 px-2.5 py-1.5">
+            <div className="flex flex-col items-center justify-center border-x border-paper/10 px-2.5 py-1.5 short:py-1">
               <div className="label text-paper-mute">{unlimited ? "Academy" : "Time"}</div>
               <div
                 className={cn("num text-xl font-bold leading-none sm:text-2xl", low ? "text-danger anim-blink" : "text-paper")}
@@ -69,7 +69,7 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
             </div>
 
             {/* Score + controls */}
-            <div className="flex min-w-0 items-start justify-end gap-2 px-2 py-1.5">
+            <div className="flex min-w-0 items-start justify-end gap-2 px-2 py-1.5 short:py-1">
               <div className="min-w-0 text-right">
                 <div className="label text-paper-mute">Score</div>
                 <div key={hud.scoreBump} className="num anim-score-pop text-lg font-bold leading-none text-paper sm:text-xl">
@@ -182,7 +182,7 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
                 </span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <p className="text-[12px] leading-snug text-paper sm:text-[13px]">{hud.tutorial.instruction}</p>
+                <p className="text-[12px] leading-snug text-paper sm:text-[13px] short:hidden">{hud.tutorial.instruction}</p>
                 {hud.tutorial.completed && (
                   <span className="flex shrink-0 items-center gap-1 rounded border border-safe/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-safe">
                     <Icon name="check" className="h-3 w-3" />

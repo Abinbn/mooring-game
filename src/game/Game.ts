@@ -647,9 +647,10 @@ export class Game {
       muted: this.audio.muted,
       tutorial: this.getTutorialInfo(),
       rudder: this.rudder,
-      tugPenaltyWarning: this.tugState === "attached" && !this.isInPilotArea(),
+      tugPenaltyWarning:
+        this.level.missionType !== "tutorial" && this.tugState === "attached" && !this.isInPilotArea(),
       tugBreachIn:
-        this.tugState === "attached" && !this.isInPilotArea() && this.level.missionType !== "tutorial"
+        this.level.missionType !== "tutorial" && this.tugState === "attached" && !this.isInPilotArea()
           ? Math.max(0, TUG_BREACH_GRACE - this.tugBreachTimer)
           : null,
       unlimitedTime: this.level.timeLimit > UNLIMITED_TIME,
@@ -1024,7 +1025,7 @@ export class Game {
 
     // Tug pilot-boundary breach: fine, then fail the contract after a grace
     // period. The academy is exempt — it sends the ship out on purpose.
-    if (playing && this.tugState === "attached" && !this.isInPilotArea()) {
+    if (playing && this.level.missionType !== "tutorial" && this.tugState === "attached" && !this.isInPilotArea()) {
       this.tugBreachTimer += dt;
       this.tugPenaltyTimer += dt;
       if (this.tugPenaltyTimer >= 0.7) {
@@ -1033,7 +1034,7 @@ export class Game {
         this.audio.bump();
         this.addText(this.pos.x, this.pos.y - SHIP_W - 25, "−5 PTS · TUGS OUTSIDE PILOT AREA", "#d9564a", 15);
       }
-      if (this.level.missionType !== "tutorial" && this.tugBreachTimer >= TUG_BREACH_GRACE) {
+      if (this.tugBreachTimer >= TUG_BREACH_GRACE) {
         this.gameOver("tug_open_sea");
         return;
       }
