@@ -25,6 +25,10 @@ export class AudioSys {
   }
 
   /** Must be called from a user gesture. Safe to call repeatedly. */
+  /**
+   * Every call site of `ensure()` is a user action (start, button, horn), so it
+   * also lifts a pause-hold. Merely reading the graph never calls it.
+   */
   ensure() {
     if (this.ctx) {
       if (this.ctx.state === "suspended") this.ctx.resume().catch(() => {});
@@ -117,6 +121,33 @@ export class AudioSys {
   toggleMuted() {
     this.setMuted(!this.muted);
     return this.muted;
+  }
+
+  /**
+   * Stop everything, engine and one-shots alike. Suspending the context is the
+   * only way to silence a horn or a collision tone that is already ringing, and
+   * it also frees the audio device while the game is paused.
+   */
+  suspend() {
+    this.silenceLoops();
+    try {
+      void this.ctx?.suspend();
+    } catch {
+      /* already suspended or closed */
+    }
+  }
+
+  /** Wake the graph again after a pause. Safe when nothing is playing. */
+  resume() {
+    if (!this.ctx) {
+      this.ensure();
+      return;
+    }
+    try {
+      if (this.ctx.state === "suspended") void this.ctx.resume();
+    } catch {
+      /* ignore */
+    }
   }
 
   /** Release the audio graph (React unmount / hot reload). */

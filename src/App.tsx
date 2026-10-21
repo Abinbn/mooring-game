@@ -182,6 +182,9 @@ export default function App() {
   }, []);
 
   // Global menu keys
+  // The engine owns pause/resume and the helm keys. This handler only deals
+  // with the screens, so a key press can never be handled twice — which is what
+  // used to make pause flicker on and off.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement;
@@ -189,18 +192,17 @@ export default function App() {
       const g = gameRef.current;
       if (!g) return;
       const p = phaseRef.current;
+
       if (e.code === "KeyM") {
         setMuted(g.toggleMute());
         return;
       }
-      // A run only ever starts from an explicit button press, so a stray
-      // keypress can never drop the player straight into the harbour.
-      if (p === "menu") return;
-
+      if (p === "playing" || p === "paused") {
+        if (e.code === "KeyR" && p === "paused") restart();
+        return;
+      }
       if (e.code === "Escape") {
-        if (p === "playing") g.pause();
-        else if (p === "paused") g.resume();
-        else if (p === "gameover") toMenu();
+        if (p === "gameover") toMenu();
         return;
       }
       if (e.code === "Enter" || e.code === "Space") {
@@ -211,13 +213,6 @@ export default function App() {
           e.preventDefault();
           restart();
         }
-      } else if (e.code === "KeyR") {
-        if (p === "gameover" || p === "paused") restart();
-      } else if (e.code === "KeyP") {
-        if (p === "playing") g.pause();
-        else if (p === "paused") g.resume();
-      } else if (p === "levelClear" && !e.repeat) {
-        g.skipLevelClear();
       }
     };
     window.addEventListener("keydown", onKey);

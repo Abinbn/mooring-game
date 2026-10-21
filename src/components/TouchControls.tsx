@@ -36,7 +36,7 @@ function TouchButton({
   const ref = useRef<HTMLButtonElement>(null);
   const active = useRef(false);
   // Latest handler in a ref: the unmount cleanup must not fire merely because
-  // the parent re-created the callback (linked mode does that on every tick).
+  // the parent re-created the callback.
   const onInputRef = useRef(onInput);
   useEffect(() => {
     onInputRef.current = onInput;
@@ -133,26 +133,28 @@ function TapButton({
 }
 
 /* ── Speed read-out ─────────────────────────────────────────────── */
-function SpeedBadge({ speed }: { speed: number }) {
-  const kn = speed * 0.55;
-  const stopped = Math.abs(kn) < 0.05;
-  const reverse = kn < -0.05;
+function SpeedBadge({ forward, speed }: { forward: number; speed: number }) {
+  const kn = forward * 0.55;
+  const stopped = Math.abs(speed) < 0.4 || Math.abs(kn) < 0.05;
+  const reverse = !stopped && kn < 0;
   return (
     <div
       className={cn(
-        "num flex w-[54px] flex-col items-center justify-center rounded border py-1 short:w-[44px]",
+        "num flex w-[54px] flex-col items-center justify-center rounded-md border-2 py-1 shadow-[0_2px_0_rgba(0,0,0,0.45)] short:w-[44px]",
         stopped
-          ? "border-paper/20 bg-paper/[0.06] text-paper-mute"
+          ? "border-paper/25 bg-ink-900/90 text-paper-dim"
           : reverse
-            ? "border-signal/60 bg-signal/15 text-signal"
-            : "border-safe/60 bg-safe/15 text-safe",
+            ? "border-danger/70 bg-[#2a0f0d]/92 text-[#ff9a8e]"
+            : "border-safe/70 bg-[#06231c]/92 text-[#8ff0bd]",
       )}
-      aria-label={`Speed ${kn.toFixed(1)} knots`}
+      aria-label={`Speed ${Math.abs(kn).toFixed(1)} knots ${reverse ? "astern" : "ahead"}`}
     >
-      <span className="text-[13px] font-bold leading-none">
+      <span className="text-[15px] font-bold leading-none tabular-nums">
         {stopped ? "0.0" : `${reverse ? "−" : ""}${Math.abs(kn).toFixed(1)}`}
       </span>
-      <span className="text-[8px] font-semibold uppercase tracking-[0.1em] opacity-70">knots</span>
+      <span className="text-[8px] font-semibold uppercase leading-none tracking-[0.1em] opacity-80">
+        {reverse ? "kns ast" : "knots"}
+      </span>
     </div>
   );
 }
@@ -174,7 +176,7 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
       icon="link"
       label={linked ? "Linked" : "Link"}
       pressed={linked}
-      className={cn(linked ? "border-teal/70 bg-teal/20 text-teal" : "text-paper-mute")}
+      className={cn("!h-8 !w-auto min-w-[76px] flex-row gap-1.5 px-2.5 short:!h-7", linked ? "border-teal/70 bg-teal/20 text-teal" : "text-paper-mute")}
     />
   );
 
@@ -184,10 +186,14 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
       className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-1 px-2 pb-[calc(10px_+_env(safe-area-inset-bottom))] font-display sm:px-3"
     >
       {/* ── Steering (bow + stern tugs, or the rudder) ────────── */}
-      <div className="pointer-events-auto flex flex-col items-center gap-1">
-        <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-paper-mute short:hidden">
-          {tugAttached ? (linked ? "Tugs · linked" : "Tugs") : "Rudder"}
-        </span>
+      <div className="pointer-events-auto flex flex-col items-start gap-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-paper-mute short:hidden">
+            {tugAttached ? (linked ? "Tugs · linked" : "Tugs") : "Rudder"}
+          </span>
+          {/* The mode switch rides above the arrows, never between them. */}
+          {tugAttached && linkButton}
+        </div>
 
         {!tugAttached ? (
           <div className="flex gap-1.5">
@@ -195,7 +201,7 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
             <TouchButton action="sternRight" onInput={onInput} icon="chevronRight" label="Stbd" />
           </div>
         ) : linked ? (
-          /* Linked: the mode switch sits between Push and Pull */
+          /* Linked: both tugs answer the same pair of buttons. */
           <div className="flex gap-1.5">
             <TouchButton
               action="bowLeft"
@@ -206,7 +212,6 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
               icon="chevronLeft"
               label="Push"
             />
-            {linkButton}
             <TouchButton
               action="bowRight"
               onInput={(_, d) => {
@@ -218,10 +223,8 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
             />
           </div>
         ) : (
-          /* Independent tugs: the mode switch sits in the middle of the four */
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
             <TouchButton action="bowLeft" onInput={onInput} icon="chevronLeft" label="Bow" />
-            <div className="row-span-2 flex items-center">{linkButton}</div>
             <TouchButton action="bowRight" onInput={onInput} icon="chevronRight" label="Bow" />
             <TouchButton action="sternLeft" onInput={onInput} icon="chevronLeft" label="Stern" />
             <TouchButton action="sternRight" onInput={onInput} icon="chevronRight" label="Stern" />
@@ -229,8 +232,9 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
         )}
       </div>
 
-      {/* ── Tug telegraph + horn ─────────────────────────────── */}
-      <div className="pointer-events-auto flex flex-col items-center gap-1.5 self-end">
+      {/* ── Horn · tug telegraph (horn left, tug button right) ── */}
+      <div className="pointer-events-auto flex items-end gap-1.5 self-end">
+        <TapButton onClick={onHorn ?? (() => {})} icon="shipHorn" label="Horn" className="text-paper-mute" />
         <TapButton
           onClick={onToggleTugs ?? (() => {})}
           icon="anchor"
@@ -244,12 +248,11 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
                 : "text-paper-mute",
           )}
         />
-        <TapButton onClick={onHorn ?? (() => {})} icon="horn" label="Horn" className="text-paper-mute" />
       </div>
 
       {/* ── Engine, with the speed read-out above it ─────────── */}
       <div className="pointer-events-auto flex flex-col items-center gap-1.5 self-end">
-        <SpeedBadge speed={hud.speed} />
+        <SpeedBadge forward={hud.forwardSpeed} speed={hud.speed} />
         <TouchButton action="ahead" onInput={onInput} icon="chevronUp" label="Ahead" />
         <TouchButton action="astern" onInput={onInput} icon="chevronDown" label="Astern" />
       </div>

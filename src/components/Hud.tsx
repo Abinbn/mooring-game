@@ -22,6 +22,10 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
   const curMag = Math.hypot(hud.current.x, hud.current.y);
   const curAngle = (Math.atan2(hud.current.y, hud.current.x) * 180) / Math.PI;
   const tugsAttached = hud.tugState === "attached";
+  // Signed speed along the keel: astern reads as a negative.
+  const kn = hud.forwardSpeed * 0.55;
+  const moving = hud.speed >= 0.4;
+  const astern = moving && hud.forwardSpeed < 0;
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none font-display">
@@ -31,7 +35,7 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
           in the space that is actually free.                          */}
       <div data-ui-top className="absolute inset-x-0 top-0 flex flex-col gap-1.5 px-2 pb-2 pt-[calc(8px_+_env(safe-area-inset-top))] sm:px-3 sm:pt-[calc(12px_+_env(safe-area-inset-top))]">
         <div className="panel-flat overflow-hidden rounded-lg">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto_minmax(0,1fr)] items-stretch">
             {/* Mission */}
             <div className="min-w-0 px-2.5 py-1.5 short:py-1">
               <div className="label truncate text-paper-mute">
@@ -68,6 +72,29 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
               </div>
             </div>
 
+            {/* Speed · the read-out the desktop view had no room for */}
+            <div className="hidden flex-col items-center justify-center border-r border-paper/10 px-3 py-1.5 sm:flex">
+              <div className="label text-paper-mute">Speed</div>
+              <div
+                className={cn(
+                  "num flex items-baseline gap-1 text-xl font-bold leading-none",
+                  !moving ? "text-paper-dim" : astern ? "text-danger" : "text-paper",
+                )}
+                aria-label={`Speed ${Math.abs(kn).toFixed(1)} knots ${astern ? "astern" : "ahead"}`}
+              >
+                <span>{!moving ? "0.0" : `${astern ? "−" : ""}${Math.abs(kn).toFixed(1)}`}</span>
+                <span className="text-[10px] font-semibold uppercase text-paper-mute">kn</span>
+              </div>
+              <div
+                className={cn(
+                  "mt-0.5 text-[9px] font-semibold uppercase tracking-[0.08em]",
+                  !moving ? "text-paper-mute" : astern ? "text-danger" : "text-safe",
+                )}
+              >
+                {!moving ? "All stop" : astern ? "Astern" : "Ahead"}
+              </div>
+            </div>
+
             {/* Score + controls */}
             <div className="flex min-w-0 items-start justify-end gap-2 px-2 py-1.5 short:py-1">
               <div className="min-w-0 text-right">
@@ -100,7 +127,7 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
                       <Icon name="anchor" className="h-4 w-4" />
                     </button>
                     <button type="button" onClick={onHorn} className={BTN} title="Ship horn (H)" aria-label="Ship horn">
-                      <Icon name="horn" className="h-4 w-4" />
+                      <Icon name="shipHorn" className="h-4 w-4" />
                     </button>
                   </div>
                 )}
@@ -242,7 +269,8 @@ export default function Hud({ hud, touch, onPause, onMute, onHorn, onToggleTugs 
 
       {/* ── Level intro ──────────────────────────────────────── */}
       {hud.introActive && !hud.tutorial && (
-        <div key={hud.level} className="anim-banner absolute left-1/2 top-[38%] w-[min(92vw,560px)] -translate-x-1/2 text-center">
+        /* No fade-out: the briefing stays up until the player takes command. */
+        <div key={hud.level} className="anim-fade absolute left-1/2 top-[38%] w-[min(92vw,560px)] -translate-x-1/2 text-center">
           <div className="panel inline-block rounded-lg px-5 py-3 text-left sm:px-6 sm:py-4">
             <div className="label text-teal">
               {hud.missionType === "departure" ? `Outbound contract ${hud.level}` : `Contract ${hud.level}`}
@@ -260,12 +288,12 @@ function Chip({ ok, label, tone }: { ok: boolean; label: string; tone?: "teal" }
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 rounded border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.06em]",
+        "flex items-center gap-1.5 rounded border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.06em] backdrop-blur-[2px]",
         tone === "teal"
-          ? "border-teal/50 bg-teal/15 text-teal"
+          ? "border-teal/60 bg-ink-900/85 text-teal"
           : ok
-            ? "border-safe/50 bg-safe/12 text-safe"
-            : "border-paper/15 bg-paper/[0.04] text-paper-mute",
+            ? "border-safe/60 bg-ink-900/85 text-safe"
+            : "border-paper/25 bg-ink-900/85 text-paper-dim",
       )}
     >
       <span className={cn("inline-block h-1.5 w-1.5 rounded-full", ok && tone !== "teal" ? "bg-safe" : "bg-paper/30")} />

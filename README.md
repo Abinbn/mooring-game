@@ -31,9 +31,9 @@ it anywhere, or wrap it for a desktop/mobile shell. No runtime dependencies.
 
 | Action | Keyboard | Touch |
 | --- | --- | --- |
-| Engine ahead / astern | `W` `S` (or `↑` `↓`) | ▲ / ▼ |
+| Engine ahead / astern (astern is ⅓ speed) | `W` `S` (or `↑` `↓`) | ▲ / ▼ |
 | Bow tug port / starboard | `Q` `E` | Bow pad |
-| Stern tug (or rudder when detached) | `A` `D` | Stern pad |
+| Stern tug (or the ship's rudder when detached) | `A` `D` | Stern pad |
 | Both tugs together | `←` `→` | Link mode, then Push / Pull |
 | Attach / cast off tugs | `T` | Anchor button |
 | Ship horn | `H` | Horn button |
@@ -45,7 +45,9 @@ it anywhere, or wrap it for a desktop/mobile shell. No runtime dependencies.
 1. **Approach** — line the ship up with the berth and kill your speed early. She
    carries a lot of momentum and the water pushes back.
 2. **Summon tugs** inside the pilot station, or handle her on the engine and
-   rudder alone if you prefer.
+   rudder alone if you prefer — but the rudder is feeble, about 4 °/s. Two tugs
+   on the hull swing her at around 20 °/s, and that is what makes a 200 m hull
+   turn in a basin. The clock and the briefing wait for your first command.
 3. **Berth** — park inside the dashed outline, parallel to the quay, nearly
    stopped, and hold station until the lines are secured.
 4. **Departure contracts** reverse this: unmoor, clear the fairway, and cast the
@@ -53,7 +55,9 @@ it anywhere, or wrap it for a desktop/mobile shell. No runtime dependencies.
    you, then revokes the contract.
 
 Scoring rewards precision and a clean hull; consecutive perfect berths multiply
-the fee. Best runs are kept in a local harbour log.
+the fee. Best runs are kept in a local harbour log, one entry per callsign — the
+callsign is remembered on this device, so repeat runs refine your own record
+instead of stacking up duplicates.
 
 ## Project layout
 

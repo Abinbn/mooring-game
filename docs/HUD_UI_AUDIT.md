@@ -155,3 +155,72 @@ camera was reversing.
 - SSR render of the start and game-over screens: no jargon, no key-to-start hint,
   logged-pilot line present, name form suppressed for a known callsign.
 - `npm run build` — single 370 kB `dist/index.html` (112 kB gzipped).
+
+## Third pass — helm, tugs, cockpit feedback and the pause key
+
+Reported from play: the ship was too slow to swing, the clock started before the
+player did, reverse ran as fast as ahead, `Esc`/`P` did not pause (and flickered
+when it did), sound carried on through a pause, the speed read-out was
+unreadable and missing on desktop, the horn shared the speaker icon, and the
+tugs teleported between flanks.
+
+### Handing
+
+| Problem | Cause | Fix |
+| --- | --- | --- |
+| The hull could barely be turned, in any mode. | The 4.3 °/s yaw cap applied to the tugs as well as the rudder. | The cap is now mode-dependent: `MAX_ANGVEL = 0.075` (≈4.3 °/s) on the rudder, `MAX_ANGVEL_TUGS = 0.38` (≈21.8 °/s) with the tugs fast, `TUG_TORQUE_SCALE = 1.8`. A full circle with the tugs takes **16.6 s**; on the rudder alone she creeps round, which is the point of hiring tugs. |
+| Reverse matched ahead. | Astern used 63 % of the ahead thrust and the same drag model. | `ENGINE_ASTERN = 5` plus a soft `ASTERN_SPEED_LIMIT = 22 u/s` governor: **22.3 u/s astern against 66.8 u/s ahead — exactly ⅓**. |
+| The clock ran while the briefing was up. | `timeLeft` ticked from the first frame of the level. | The clock and the briefing both hold until the first command (helm, tugs or horn), and the briefing card no longer fades out on a timer of its own. |
+
+### Pause
+
+- `P`/`Esc` are handled in exactly one place (the engine). The React layer used to
+  handle them too, so a single press paused and immediately resumed — the flicker.
+- Key auto-repeat no longer toggles pause; `Enter`/`Space` still do nothing on the
+  menu, so a run can only start from a button.
+- `AudioSys.suspend()` now suspends the whole `AudioContext`, which silences a horn
+  or a collision tone that is already ringing, and `resume()` wakes it. Loops are
+  faded out first so nothing slams back in at full level.
+
+### Tugs
+
+- **One flank, decided once.** Both tugs work the seaward side, chosen when they
+  are summoned; the old code re-pointed them at the ship's current flank, so the
+  first tug to come alongside appeared to hop to the other side.
+- **A real approach.** Three latched stages — open out to a runway ~40 u off the
+  topsides, run along it until abeam, then haul in — plus a wide clearance while
+  closing fast, and a "round the nearer end" diversion if a tug is on the wrong
+  side of the hull. Nothing aims across the ship any more.
+- **Idle means idle.** At the berth the tugs hold their station and their heading;
+  the bobbing offsets and the ±0.06 rad heading hunt are gone.
+- **No snapping.** Attachment is now within 9 u of the slot and the hand-over to
+  hull-relative motion starts from where the tug actually is. Worst observed
+  single-frame movement through summon, approach, attach and heavy tug work: 2.9 u.
+- If the deadline expires while they are still out in the basin, they stand down
+  instead of teleporting to the hull.
+
+### Cockpit
+
+- `HudData.forwardSpeed` is the signed speed along the keel, so the read-outs can
+  show **astern as a negative** and colour it as danger.
+- The touch pad's speed block has an opaque dark ground and a brighter value
+  (it was translucent green on water), and reads `−4.6 / kns ast` going astern.
+- **Desktop now has a speed read-out**: its own cell in the instrument strip —
+  number, unit, and AHEAD / ASTERN / ALL STOP.
+- Pad layout: **Horn left, Summon/Cast off right**, and the **Link** switch moved
+  above the arrow cluster instead of sitting between the buttons.
+- New `shipHorn` glyph (a whistle on its mast) so the horn button can no longer be
+  mistaken for the sound toggle, which keeps the speaker.
+- Status chips gained an opaque ground; the pause screen's key hints now match the
+  real controls (including "aster is a third of ahead" and "the same keys work the
+  rudder when the tugs are away").
+
+### Verification
+- `npm run typecheck` — clean; `npm run build` — 387 kB single file (114 kB gzip).
+- `npm run selfcheck` — 268/268.
+- Headless probes: pause/resume by key with repeat, clock and briefing held until
+  the first command (helm, horn and summon each start it), helm keys inert while
+  paused, astern ratio, rudder and tug yaw, full circle timing, tug station-keeping,
+  approach clearance, no single-frame teleports, deadline stand-down, mooring settle.
+- SSR renders of the pad and the strip: horn left of summon, link above the arrows,
+  speed above Ahead, desktop speed cell present, whistle glyph on the horn only.
