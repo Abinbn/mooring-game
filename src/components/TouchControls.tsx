@@ -10,6 +10,13 @@ interface Props {
   hud: HudData;
 }
 
+/**
+ * One size for every control on the pad. Keeping them identical is what makes
+ * the cluster read as an instrument panel rather than a pile of buttons.
+ */
+const BTN = "h-[54px] w-[54px] short:h-[44px] short:w-[44px]";
+const LABEL = "text-[9px] font-semibold uppercase tracking-[0.08em] opacity-75";
+
 /* ── Hold-to-act button ─────────────────────────────────────────── */
 function TouchButton({
   action,
@@ -18,7 +25,6 @@ function TouchButton({
   icon,
   label,
   disabled,
-  invert,
 }: {
   action: Action;
   onInput: (a: Action, d: boolean) => void;
@@ -26,7 +32,6 @@ function TouchButton({
   icon: IconName;
   label: string;
   disabled?: boolean;
-  invert?: boolean;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const active = useRef(false);
@@ -80,7 +85,7 @@ function TouchButton({
     <button
       ref={ref}
       type="button"
-      className={cn("tbtn", disabled && "pointer-events-none opacity-40", className)}
+      className={cn("tbtn", BTN, disabled && "pointer-events-none opacity-40", className)}
       onPointerDown={press}
       onPointerUp={release}
       onPointerCancel={release}
@@ -89,8 +94,8 @@ function TouchButton({
       aria-label={label}
       disabled={disabled}
     >
-      <Icon name={icon} className={cn("h-6 w-6", invert && "rotate-90")} />
-      <span className="text-[9px] font-semibold uppercase tracking-[0.08em] opacity-75">{label}</span>
+      <Icon name={icon} className="h-[22px] w-[22px] short:h-5 short:w-5" />
+      <span className={LABEL}>{label}</span>
     </button>
   );
 }
@@ -112,7 +117,7 @@ function TapButton({
   return (
     <button
       type="button"
-      className={cn("tbtn", className)}
+      className={cn("tbtn", BTN, className)}
       onPointerDown={(e) => {
         e.preventDefault();
         onClick();
@@ -121,8 +126,8 @@ function TapButton({
       aria-label={label}
       aria-pressed={pressed}
     >
-      <Icon name={icon} className="h-5 w-5" />
-      <span className="text-[9px] font-semibold uppercase tracking-[0.08em] opacity-75">{label}</span>
+      <Icon name={icon} className="h-[22px] w-[22px] short:h-5 short:w-5" />
+      <span className={LABEL}>{label}</span>
     </button>
   );
 }
@@ -130,14 +135,14 @@ function TapButton({
 /* ── Speed read-out ─────────────────────────────────────────────── */
 function SpeedBadge({ speed }: { speed: number }) {
   const kn = speed * 0.55;
-  const stopped = Math.abs(kn) < 0.08;
-  const reverse = kn < -0.08;
+  const stopped = Math.abs(kn) < 0.05;
+  const reverse = kn < -0.05;
   return (
     <div
       className={cn(
-        "num flex min-w-[68px] flex-col items-center justify-center rounded border px-2 py-1",
+        "num flex w-[54px] flex-col items-center justify-center rounded border py-1 short:w-[44px]",
         stopped
-          ? "border-danger/60 bg-danger/15 text-danger"
+          ? "border-paper/20 bg-paper/[0.06] text-paper-mute"
           : reverse
             ? "border-signal/60 bg-signal/15 text-signal"
             : "border-safe/60 bg-safe/15 text-safe",
@@ -163,15 +168,22 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
     if (!tugAttached) setLinked(false);
   }, [tugAttached]);
 
-  const big = "short:h-[46px] short:w-[58px] h-[62px] w-[72px]";
-  const engine = "short:h-[46px] short:w-[64px] h-[62px] w-[80px]";
+  const linkButton = (
+    <TapButton
+      onClick={() => setLinked((v) => !v)}
+      icon="link"
+      label={linked ? "Linked" : "Link"}
+      pressed={linked}
+      className={cn(linked ? "border-teal/70 bg-teal/20 text-teal" : "text-paper-mute")}
+    />
+  );
 
   return (
     <div
       data-ui-pad
       className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-1 px-2 pb-[calc(10px_+_env(safe-area-inset-bottom))] font-display sm:px-3"
     >
-      {/* ── Steering ─────────────────────────────────────────── */}
+      {/* ── Steering (bow + stern tugs, or the rudder) ────────── */}
       <div className="pointer-events-auto flex flex-col items-center gap-1">
         <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-paper-mute short:hidden">
           {tugAttached ? (linked ? "Tugs · linked" : "Tugs") : "Rudder"}
@@ -179,10 +191,11 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
 
         {!tugAttached ? (
           <div className="flex gap-1.5">
-            <TouchButton action="sternLeft" onInput={onInput} icon="chevronLeft" label="Port" className={big} />
-            <TouchButton action="sternRight" onInput={onInput} icon="chevronRight" label="Stbd" className={big} />
+            <TouchButton action="sternLeft" onInput={onInput} icon="chevronLeft" label="Port" />
+            <TouchButton action="sternRight" onInput={onInput} icon="chevronRight" label="Stbd" />
           </div>
         ) : linked ? (
+          /* Linked: the mode switch sits between Push and Pull */
           <div className="flex gap-1.5">
             <TouchButton
               action="bowLeft"
@@ -192,8 +205,8 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
               }}
               icon="chevronLeft"
               label="Push"
-              className={big}
             />
+            {linkButton}
             <TouchButton
               action="bowRight"
               onInput={(_, d) => {
@@ -202,28 +215,28 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
               }}
               icon="chevronRight"
               label="Pull"
-              className={big}
             />
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-1.5">
-            <TouchButton action="bowLeft" onInput={onInput} icon="chevronLeft" label="Bow" className="short:h-[42px] short:w-[56px] h-[50px] w-[62px]" />
-            <TouchButton action="bowRight" onInput={onInput} icon="chevronRight" label="Bow" className="short:h-[42px] short:w-[56px] h-[50px] w-[62px]" />
-            <TouchButton action="sternLeft" onInput={onInput} icon="chevronLeft" label="Stern" className="short:h-[42px] short:w-[56px] h-[50px] w-[62px]" />
-            <TouchButton action="sternRight" onInput={onInput} icon="chevronRight" label="Stern" className="short:h-[42px] short:w-[56px] h-[50px] w-[62px]" />
+          /* Independent tugs: the mode switch sits in the middle of the four */
+          <div className="grid grid-cols-3 gap-1.5">
+            <TouchButton action="bowLeft" onInput={onInput} icon="chevronLeft" label="Bow" />
+            <div className="row-span-2 flex items-center">{linkButton}</div>
+            <TouchButton action="bowRight" onInput={onInput} icon="chevronRight" label="Bow" />
+            <TouchButton action="sternLeft" onInput={onInput} icon="chevronLeft" label="Stern" />
+            <TouchButton action="sternRight" onInput={onInput} icon="chevronRight" label="Stern" />
           </div>
         )}
       </div>
 
-      {/* ── Tugs / link / horn ───────────────────────────────── */}
-      <div className="pointer-events-auto flex flex-col items-center gap-1 self-end pb-0.5">
+      {/* ── Tug telegraph + horn ─────────────────────────────── */}
+      <div className="pointer-events-auto flex flex-col items-center gap-1.5 self-end">
         <TapButton
           onClick={onToggleTugs ?? (() => {})}
           icon="anchor"
           label={tugAttached ? "Cast off" : "Summon"}
           pressed={tugAttached}
           className={cn(
-            "short:h-[42px] short:w-[54px] h-[46px] w-[58px]",
             tugAttached
               ? "border-safe/70 bg-safe/20 text-safe"
               : hud.inRendezvousRange
@@ -231,34 +244,14 @@ export default function TouchControls({ onInput, onToggleTugs, onHorn, hud }: Pr
                 : "text-paper-mute",
           )}
         />
-        {tugAttached && (
-          <TapButton
-            onClick={() => setLinked((v) => !v)}
-            icon="link"
-            label={linked ? "Linked" : "Link"}
-            pressed={linked}
-            className={cn(
-              "short:h-[38px] short:w-[54px] h-[40px] w-[58px]",
-              linked ? "border-teal/70 bg-teal/20 text-teal" : "text-paper-mute",
-            )}
-          />
-        )}
-        <TapButton
-          onClick={onHorn ?? (() => {})}
-          icon="horn"
-          label="Horn"
-          className="short:h-[38px] short:w-[54px] h-[40px] w-[58px] text-paper-mute"
-        />
+        <TapButton onClick={onHorn ?? (() => {})} icon="horn" label="Horn" className="text-paper-mute" />
       </div>
 
-      {/* ── Engine ───────────────────────────────────────────── */}
-      <div className="pointer-events-auto flex flex-col items-center gap-1 short:flex-row short:items-center">
-        <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-paper-mute short:hidden">Engine</span>
-        <div className="flex flex-col items-center gap-1 short:flex-row">
-          <TouchButton action="ahead" onInput={onInput} icon="chevronUp" label="Ahead" className={engine} />
-          <SpeedBadge speed={hud.speed} />
-          <TouchButton action="astern" onInput={onInput} icon="chevronDown" label="Astern" className={engine} />
-        </div>
+      {/* ── Engine, with the speed read-out above it ─────────── */}
+      <div className="pointer-events-auto flex flex-col items-center gap-1.5 self-end">
+        <SpeedBadge speed={hud.speed} />
+        <TouchButton action="ahead" onInput={onInput} icon="chevronUp" label="Ahead" />
+        <TouchButton action="astern" onInput={onInput} icon="chevronDown" label="Astern" />
       </div>
     </div>
   );

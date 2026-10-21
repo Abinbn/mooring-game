@@ -13,19 +13,33 @@ export const QUAY_X = 0; // quay face is the vertical line x = 0; water is x < 0
 export const ENGINE_AHEAD = 15;
 export const ENGINE_ASTERN = 9.5;
 export const TUG_FORCE = 5.6;
+// A tug pushing broadside mostly translates the ship; only part of that force
+// becomes yaw, otherwise a 200 m hull pivots like a speedboat.
+export const TUG_TORQUE_SCALE = 0.3;
 
 // Response rates (1/s)
 export const ENGINE_RAMP = 2.6;
 export const TUG_RAMP = 6;
 
-// Hydrodynamic drag
-export const K_LONG = 0.22;
-export const C_LONG = 0.002;
+// Hydrodynamic drag. A loaded ship keeps way for a long time: the linear
+// longitudinal term is deliberately low so she drifts on for tens of seconds.
+export const K_LONG = 0.095;
+export const C_LONG = 0.0016;
 export const K_LAT = 0.68;
 export const C_LAT = 0.012;
-export const K_ANG = 0.7;
+export const K_ANG = 0.9;
 export const C_ANG = 0.6;
-export const INERTIA = 1250;
+export const INERTIA = 1500;
+
+// Rate limits: yaw (rad/s) and how hard the rudder can bite at speed.
+export const MAX_ANGVEL = 0.075; // ≈ 4.3 °/s
+export const RUDDER_LIFT = 0.5;
+export const RUDDER_DRAG = 0.1;
+
+// Free-sailing tugboats (standby, repositioning, coming alongside)
+export const TUG_ACCEL = 30; // units/s² — tugs build way from rest, not snap to speed
+export const TUG_MAX_SPEED = 92; // units/s — enough to overhaul a ship still making way
+export const TUG_COLLIDE_R = 7.5; // half-width used for hull contacts
 
 // Collision
 export const RESTITUTION_QUAY = 0.12;
